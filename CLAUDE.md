@@ -4,7 +4,8 @@ Windows desktop tool that records workflow telemetry and compiles Claude Code sk
 
 ## Commands
 
-- `pip install -e ".[dev]"` — install in dev mode
+- `uv pip install -e ".[dev]"` — install in dev mode
+
 - `pytest tests/ -v` — run tests
 - `teach-skill compile <file.jsonl>` — compile a recording into a skill
 - `teach-skill record` — start the recorder (Windows only)

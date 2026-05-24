@@ -9,9 +9,10 @@ Record desktop workflows, compile them into Claude Code skills.
 ```bash
 git clone https://github.com/maxswritessomecode/teach-skill.git
 cd teach-skill
-python -m venv .venv
+uv venv
+source .venv/bin/activate     # Mac/Linux
 .venv\Scripts\activate        # Windows
-pip install -e ".[recorder,dev]"
+uv pip install -e ".[recorder,dev]"
 ```
 
 ## Usage
@@ -44,7 +45,7 @@ teach-skill record
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
