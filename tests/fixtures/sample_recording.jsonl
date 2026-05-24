@@ -1,0 +1,9 @@
+{"ts": "2026-05-24T10:30:00.000Z", "type": "recording_meta", "machine": "DESKTOP-TEST", "os": "Windows 11", "version": "0.1.0"}
+{"ts": "2026-05-24T10:30:01.123Z", "type": "window_switch", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/0001.png"}
+{"ts": "2026-05-24T10:30:15.789Z", "type": "in_app_capture", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/0002.png", "trigger": "click_after_5s"}
+{"ts": "2026-05-24T10:30:20.456Z", "type": "clipboard_text", "content": "=SUM(B2:B15)", "source_process": "chrome.exe"}
+{"ts": "2026-05-24T10:30:45.456Z", "type": "session_end", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "duration_s": 44.3, "click_count": 12, "keystroke_count": 87}
+{"ts": "2026-05-24T10:30:46.000Z", "type": "window_switch", "process": "outlook.exe", "title": "RE: Q2 Numbers - Outlook", "screenshot": "frames/0003.png"}
+{"ts": "2026-05-24T10:31:30.000Z", "type": "session_end", "process": "outlook.exe", "title": "RE: Q2 Numbers - Outlook", "duration_s": 44.0, "click_count": 5, "keystroke_count": 120}
+{"ts": "2026-05-24T10:31:31.000Z", "type": "window_switch", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/0004.png"}
+{"ts": "2026-05-24T10:32:00.000Z", "type": "session_end", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "duration_s": 29.0, "click_count": 3, "keystroke_count": 15}
