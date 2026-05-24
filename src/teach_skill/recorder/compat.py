@@ -45,3 +45,20 @@ def capture_screenshot_stub() -> Image.Image:
         return ImageGrab.grab()
     
     return Image.new("RGB", (800, 600), color="blue")
+
+
+def get_clipboard_text() -> str:
+    if sys.platform == "win32":
+        try:
+            win32clipboard.OpenClipboard()
+            text = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+            win32clipboard.CloseClipboard()
+            return text or ""
+        except Exception:
+            try:
+                win32clipboard.CloseClipboard()
+            except Exception:
+                pass
+            return ""
+    return "mock_clipboard_text"
+

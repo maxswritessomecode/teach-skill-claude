@@ -20,3 +20,12 @@ def test_capture_screenshot_stub_returns_image():
     from PIL import Image
     img = capture_screenshot_stub()
     assert isinstance(img, Image.Image)
+
+
+def test_get_clipboard_text_returns_string():
+    from teach_skill.recorder.compat import get_clipboard_text
+    txt = get_clipboard_text()
+    assert isinstance(txt, str)
+    if sys.platform != "win32":
+        assert txt == "mock_clipboard_text"
+

@@ -1,11 +1,17 @@
 import asyncio
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import click
 
 from teach_skill import __version__
 from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk, save_skill
+from teach_skill.config import load_config
+from teach_skill.recorder.writer import EventWriter
+from teach_skill.recorder.controller import RecorderController
+from teach_skill.recorder.tray import RecorderTrayApp
+
 
 
 @click.group()
@@ -65,14 +71,31 @@ def compile(jsonl_path: Path):
 
 
 @main.command()
-def record():
+@click.option("--simulate", is_flag=True, help="Simulate recording on non-Windows platforms.")
+def record(simulate: bool):
     """Start the Teach Skill recorder (Windows only)."""
-    if sys.platform != "win32":
+    if sys.platform != "win32" and not simulate:
         click.echo("Error: Recording is only supported on Windows.", err=True)
+        click.echo("To simulate recording on Mac/Linux, run with --simulate.", err=True)
         sys.exit(1)
 
-    click.echo("Recorder not yet implemented. See Plan 2 (Windows Recorder).")
-    sys.exit(1)
+    config = load_config()
+    recordings_root = Path.home() / ".teach-skill" / "recordings"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_dir = recordings_root / f"recording_{timestamp}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo("Starting recorder session...")
+    click.echo("Telemetry log and frames will be saved to:")
+    click.echo(f"  {session_dir}")
+    click.echo()
+    click.echo("System Tray Icon created. Use the menu option to stop recording.")
+    click.echo("Please grant accessibility/screen recording permissions if requested.")
+
+    writer = EventWriter(session_dir)
+    controller = RecorderController(writer, config)
+    app = RecorderTrayApp(controller)
+    app.start()
 
 
 if __name__ == "__main__":
