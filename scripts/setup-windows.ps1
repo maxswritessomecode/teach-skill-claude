@@ -29,14 +29,22 @@ try {
     exit 1
 }
 
-# --- 2. Check pip ---
-Write-Host "[2/7] Checking pip..." -ForegroundColor Yellow
+# --- 2. Check uv ---
+Write-Host "[2/7] Checking uv..." -ForegroundColor Yellow
 try {
-    $pipVersion = pip --version 2>&1
-    Write-Host "  OK: $pipVersion" -ForegroundColor Green
+    $uvVersion = uv --version 2>&1
+    Write-Host "  OK: $uvVersion" -ForegroundColor Green
 } catch {
-    Write-Host "  FAIL: pip not found. Running ensurepip..." -ForegroundColor Red
-    python -m ensurepip --upgrade
+    Write-Host "  WARN: uv not found. Attempting to install..." -ForegroundColor Yellow
+    try {
+        # Download and install uv via powershell
+        powershell -Command "irm https://astral.sh/uv/install.ps1 | iex"
+        $env:Path += ";$env:USERPROFILE\.local\bin"
+        $uvVersion = uv --version 2>&1
+        Write-Host "  OK: Installed $uvVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "  WARN: Failed to install uv automatically. Falling back to standard Python pip." -ForegroundColor Yellow
+    }
 }
 
 # --- 3. Check Git ---
@@ -63,13 +71,11 @@ try {
 
 # --- 5. Clone repo (if not already in it) ---
 Write-Host "[5/7] Setting up repository..." -ForegroundColor Yellow
-$projectDir = "$env:USERPROFILE\projects\teach-skill"
+$projectDir = "$env:USERPROFILE\projects\teach-skill-antigravity"
 
 if (Test-Path "$projectDir\.git") {
     Write-Host "  OK: Repo already cloned at $projectDir" -ForegroundColor Green
     Set-Location $projectDir
-    git pull origin main 2>&1 | Out-Null
-    Write-Host "  Pulled latest changes" -ForegroundColor Green
 } else {
     Write-Host "  Cloning repo to $projectDir..." -ForegroundColor White
     New-Item -ItemType Directory -Path "$env:USERPROFILE\projects" -Force | Out-Null
@@ -80,28 +86,41 @@ if (Test-Path "$projectDir\.git") {
 
 # --- 6. Create venv and install dependencies ---
 Write-Host "[6/7] Setting up virtual environment..." -ForegroundColor Yellow
-if (-not (Test-Path ".venv")) {
-    python -m venv .venv
-    Write-Host "  Created .venv" -ForegroundColor Green
+$useUv = $false
+try {
+    $null = Get-Command uv -ErrorAction Stop
+    $useUv = $true
+} catch {}
+
+if ($useUv) {
+    if (-not (Test-Path ".venv")) {
+        uv venv
+        Write-Host "  Created .venv using uv" -ForegroundColor Green
+    } else {
+        Write-Host "  OK: .venv already exists" -ForegroundColor Green
+    }
+    
+    # Activate venv
+    & .\.venv\Scripts\Activate.ps1
+    
+    Write-Host "  Installing dependencies using uv..." -ForegroundColor White
+    uv pip install -e ".[recorder,dev]"
+    Write-Host "  OK: Project and dependencies installed via uv" -ForegroundColor Green
 } else {
-    Write-Host "  OK: .venv already exists" -ForegroundColor Green
-}
-
-# Activate venv
-& .\.venv\Scripts\Activate.ps1
-
-Write-Host "  Installing dependencies..." -ForegroundColor White
-pip install --upgrade pip | Out-Null
-
-# Core dependencies
-pip install pywin32 pynput Pillow pystray click claude-agent-sdk pytest
-
-# Install project in editable mode (if setup.py exists)
-if (Test-Path "setup.py") {
-    pip install -e .
-    Write-Host "  OK: Project installed in editable mode" -ForegroundColor Green
-} else {
-    Write-Host "  SKIP: No setup.py yet (will install later)" -ForegroundColor Yellow
+    if (-not (Test-Path ".venv")) {
+        python -m venv .venv
+        Write-Host "  Created .venv using standard Python" -ForegroundColor Green
+    } else {
+        Write-Host "  OK: .venv already exists" -ForegroundColor Green
+    }
+    
+    # Activate venv
+    & .\.venv\Scripts\Activate.ps1
+    
+    Write-Host "  Installing dependencies using pip..." -ForegroundColor White
+    pip install --upgrade pip | Out-Null
+    pip install -e ".[recorder,dev]"
+    Write-Host "  OK: Project and dependencies installed via pip" -ForegroundColor Green
 }
 
 # --- 7. Verify installations ---
