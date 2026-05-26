@@ -85,7 +85,8 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
 
 @main.command()
 @click.option("--simulate", is_flag=True, help="Simulate recording on non-Windows platforms.")
-def record(simulate: bool):
+@click.option("--auto-compile", is_flag=True, help="Automatically compile the recording into a skill when stopped.")
+def record(simulate: bool, auto_compile: bool):
     """Start the Teach Skill recorder (Windows only)."""
     if sys.platform != "win32" and not simulate:
         click.echo("Error: Recording is only supported on Windows.", err=True)
@@ -109,6 +110,25 @@ def record(simulate: bool):
     controller = RecorderController(writer, config)
     app = RecorderTrayApp(controller)
     app.start()
+
+    if auto_compile:
+        jsonl_path = session_dir / "recording.jsonl"
+        click.echo("\n[+] Recording stopped. Auto-compiling skill...")
+        if not check_agent_sdk():
+            click.echo("Error: claude-agent-sdk is not installed on this machine.", err=True)
+            click.echo("Please install it to use --auto-compile: pip install claude-agent-sdk", err=True)
+            sys.exit(1)
+
+        compiler = SkillCompiler(jsonl_path)
+        
+        click.echo("Compiling skill via Agent SDK...")
+        try:
+            skill_text = asyncio.run(compiler.compile())
+            task_name = session_dir.name.replace("recording_", "skill-").replace("_", "-")
+            skill_path = save_skill(skill_text, task_name, global_save=True)
+            click.echo(f"[✓] Skill compiled and saved globally to: {skill_path}")
+        except Exception as e:
+            click.echo(f"Error compiling skill: {e}", err=True)
 
 
 if __name__ == "__main__":
