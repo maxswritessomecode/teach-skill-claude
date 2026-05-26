@@ -19,7 +19,7 @@ class RecorderController:
         self.privacy = PrivacyFilter(enabled=config.get("privacy_filter", True))
         
         self.window_tracker = WindowTracker()
-        self.input_counter = InputCounter()
+        self.input_counter = InputCounter(capture_raw=config.get("capture_raw_keystrokes", False))
         self.clipboard_monitor = ClipboardMonitor(self.privacy)
         
         self.is_recording = True
@@ -50,15 +50,18 @@ class RecorderController:
         if self.window_tracker.update_active_window(window_info):
             # End previous window session
             if prev_process:
-                clicks, keys = self.input_counter.reset()
-                self.writer.write_event({
+                clicks, keys, typed_text = self.input_counter.reset()
+                event = {
                     "type": "session_end",
                     "process": prev_process,
                     "title": self.privacy.redact_title(prev_title),
                     "duration_s": round(time.time() - self.start_time, 1),
                     "click_count": clicks,
                     "keystroke_count": keys
-                })
+                }
+                if self.config.get("capture_raw_keystrokes", False) and typed_text:
+                    event["keys_typed"] = typed_text
+                self.writer.write_event(event)
             
             # Snap screenshot for the new window switch
             self.capture_screenshot(window_info)
@@ -103,12 +106,15 @@ class RecorderController:
     def stop_recording(self):
         self.is_recording = False
         if self.window_tracker.last_process:
-            clicks, keys = self.input_counter.reset()
-            self.writer.write_event({
+            clicks, keys, typed_text = self.input_counter.reset()
+            event = {
                 "type": "session_end",
                 "process": self.window_tracker.last_process,
                 "title": self.privacy.redact_title(self.window_tracker.last_title),
                 "duration_s": round(time.time() - self.start_time, 1),
                 "click_count": clicks,
                 "keystroke_count": keys
-            })
+            }
+            if self.config.get("capture_raw_keystrokes", False) and typed_text:
+                event["keys_typed"] = typed_text
+            self.writer.write_event(event)

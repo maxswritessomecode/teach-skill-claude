@@ -37,17 +37,16 @@ def test_compile_loads_and_shows_recording():
 
 
 def test_compile_full_flow_with_mock_sdk():
-    mock_message = MagicMock()
-    mock_message.role = "assistant"
-    mock_block = MagicMock()
-    mock_block.text = MOCK_SKILL
-    mock_message.content = [mock_block]
+    from claude_agent_sdk import AssistantMessage, TextBlock
+    
+    mock_block = TextBlock(text=MOCK_SKILL)
+    mock_message = AssistantMessage(content=[mock_block], model="claude-3")
 
-    mock_result = MagicMock()
-    mock_result.messages = [mock_message]
+    async def mock_query_generator(*args, **kwargs):
+        yield mock_message
 
     with patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True), \
-         patch("claude_agent_sdk.query", new_callable=AsyncMock, return_value=mock_result):
+         patch("claude_agent_sdk.query", new=mock_query_generator):
         runner = CliRunner()
         result = runner.invoke(
             main,
@@ -56,3 +55,4 @@ def test_compile_full_flow_with_mock_sdk():
         )
         assert "GENERATED SKILL" in result.output
         assert "update-q2-report" in result.output.lower()
+

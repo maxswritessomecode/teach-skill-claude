@@ -49,21 +49,25 @@ class SkillCompiler:
         self.load()
         payload = self.build_prompt_payload()
 
-        from claude_agent_sdk import query
+        from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage
 
-        messages = [{"role": "user", "content": payload["user_message"]}]
-
-        result = await query(
-            prompt=payload["system"],
-            messages=messages,
-            options={"max_turns": 1},
+        options = ClaudeAgentOptions(
+            system_prompt=payload["system"],
+            max_turns=15,
         )
 
-        for message in result.messages:
-            if message.role == "assistant":
+        skill_text_blocks = []
+        async for message in query(
+            prompt=payload["user_message"],
+            options=options,
+        ):
+            if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if hasattr(block, "text"):
-                        return block.text
+                        skill_text_blocks.append(block.text)
+
+        if skill_text_blocks:
+            return "".join(skill_text_blocks)
 
         raise RuntimeError("No text response received from Claude")
 

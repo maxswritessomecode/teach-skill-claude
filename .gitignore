@@ -8,4 +8,7 @@ dist/
 build/
 .pytest_cache/
 recordings/
+.claude/
+*.zip
+
 

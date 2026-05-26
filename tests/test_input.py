@@ -21,8 +21,34 @@ def test_input_counter_reset():
     counter = InputCounter()
     counter.click_count = 5
     counter.keystroke_count = 10
-    clicks, keys = counter.reset()
+    clicks, keys, text = counter.reset()
     assert clicks == 5
     assert keys == 10
+    assert text == ""
     assert counter.click_count == 0
     assert counter.keystroke_count == 0
+
+
+def test_input_counter_captures_raw_keys():
+    from unittest.mock import MagicMock
+    counter = InputCounter(capture_raw=True)
+    
+    key_h = MagicMock()
+    key_h.char = "h"
+    counter.on_press(key_h)
+    
+    key_e = MagicMock()
+    key_e.char = "e"
+    counter.on_press(key_e)
+    
+    counter.on_press("Key.space")
+    
+    key_y = MagicMock()
+    key_y.char = "y"
+    counter.on_press(key_y)
+    
+    counter.on_press("Key.backspace")
+    
+    clicks, keys, text = counter.reset()
+    assert text == "he "
+    assert keys == 5

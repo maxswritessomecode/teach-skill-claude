@@ -23,7 +23,10 @@ def main():
 
 @main.command()
 @click.argument("jsonl_path", type=click.Path(exists=True, path_type=Path))
-def compile(jsonl_path: Path):
+@click.option("--yes", "-y", is_flag=True, help="Auto-approve the generated skill and save it without prompting.")
+@click.option("--name", "-n", type=str, help="Specify the skill name for auto-saving.")
+@click.option("--global/--local", "save_global", default=True, help="Save globally (default) or locally to current project.")
+def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
     """Compile a JSONL recording into a Claude Code skill."""
     if not check_agent_sdk():
         click.echo("Error: claude-agent-sdk not installed.", err=True)
@@ -56,18 +59,28 @@ def compile(jsonl_path: Path):
     click.echo("=" * 60)
     click.echo()
 
-    if not click.confirm("Does this skill look correct?"):
-        click.echo("Skill discarded. Recording is still at:")
-        click.echo(f"  {jsonl_path}")
-        click.echo("Re-run `teach-skill compile` to try again.")
-        return
+    if not yes:
+        if not click.confirm("Does this skill look correct?"):
+            click.echo("Skill discarded. Recording is still at:")
+            click.echo(f"  {jsonl_path}")
+            click.echo("Re-run `teach-skill compile` to try again.")
+            return
 
-    task_name = click.prompt("Skill name (kebab-case)", type=str)
+        task_name = click.prompt("Skill name (kebab-case)", type=str)
+        save_global = click.confirm("Save globally? (No = save to current project)", default=True)
+    else:
+        if not name:
+            # Fallback to the directory name or a default
+            name = jsonl_path.parent.name
+            if name.startswith("recording_"):
+                name = name.replace("recording_", "skill-")
+            name = name.replace("_", "-")
+        task_name = name
 
-    save_global = click.confirm("Save globally? (No = save to current project)", default=True)
     skill_path = save_skill(skill_text, task_name, global_save=save_global)
 
     click.echo(f"Skill saved to: {skill_path}")
+
 
 
 @main.command()
@@ -80,7 +93,7 @@ def record(simulate: bool):
         sys.exit(1)
 
     config = load_config()
-    recordings_root = Path.home() / ".teach-skill" / "recordings"
+    recordings_root = Path(config.get("storage_path", str(Path.home() / ".teach-skill" / "recordings")))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     session_dir = recordings_root / f"recording_{timestamp}"
     session_dir.mkdir(parents=True, exist_ok=True)
