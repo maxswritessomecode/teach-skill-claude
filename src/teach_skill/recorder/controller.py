@@ -25,6 +25,7 @@ class RecorderController:
         self.is_recording = True
         self.start_time = time.time()
         self.last_screenshot_time = 0
+        self.in_app_capture_interval_s = 5.0
         
         # Write initial metadata event
         try:
@@ -67,6 +68,35 @@ class RecorderController:
             self.capture_screenshot(window_info)
             self.start_time = time.time()
 
+    def on_click(self, x, y, button, pressed):
+        self.input_counter.on_click(x, y, button, pressed)
+        if not self.is_recording or not pressed:
+            return
+        if not self.window_tracker.last_process:
+            return
+        if time.time() - self.last_screenshot_time < self.in_app_capture_interval_s:
+            return
+
+        current_info = get_active_window_info()
+        if (
+            current_info.get("process") != self.window_tracker.last_process
+            or current_info.get("title") != self.window_tracker.last_title
+        ):
+            self.on_window_switch(current_info)
+            return
+
+        self.capture_screenshot(
+            {
+                "process": self.window_tracker.last_process,
+                "title": self.window_tracker.last_title,
+            },
+            event_type="in_app_capture",
+            trigger="click_after_5s",
+        )
+
+    def on_press(self, key):
+        self.input_counter.on_press(key)
+
     def on_clipboard_change(self, text: str):
         if not self.is_recording:
             return
@@ -79,28 +109,40 @@ class RecorderController:
                 "source_process": self.window_tracker.last_process or "unknown"
             })
 
-    def capture_screenshot(self, window_info: dict):
+    def capture_screenshot(
+        self,
+        window_info: dict,
+        event_type: str = "window_switch",
+        trigger: str | None = None,
+    ):
         # Apply privacy filter guards
         title = window_info.get("title", "")
         if self.privacy.is_sensitive_title(title):
-            self.writer.write_event({
-                "type": "window_switch",
+            event = {
+                "type": event_type,
                 "process": window_info.get("process"),
                 "title": "[auth/login - redacted]",
                 "screenshot": "suppressed:auth_detected"
-            })
+            }
+            if trigger:
+                event["trigger"] = trigger
+            self.writer.write_event(event)
+            self.last_screenshot_time = time.time()
             return
             
         frame_path = self.writer.next_frame_path()
         img = capture_screenshot_stub()
         img.save(frame_path)
         
-        self.writer.write_event({
-            "type": "window_switch",
+        event = {
+            "type": event_type,
             "process": window_info.get("process"),
             "title": title,
             "screenshot": str(frame_path.relative_to(self.writer.session_dir))
-        })
+        }
+        if trigger:
+            event["trigger"] = trigger
+        self.writer.write_event(event)
         self.last_screenshot_time = time.time()
 
     def stop_recording(self):

@@ -1,4 +1,4 @@
-agent_tool: Antigravity
-agent_config_path: ~/.antigravitycli/
-created_date: 2026-05-24
-purpose: Antigravity-built variant of teach-skill — Windows tray app with run-recorder and CLI record command
+agent_tool: Codex
+agent_config_path: ~/.codex/
+created_date: 2026-05-28
+purpose: Codex-maintained variant of teach-skill - Windows tray app with run-recorder and CLI record command

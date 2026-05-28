@@ -59,15 +59,24 @@ Write-Host "[3/4] Installing dependencies..." -ForegroundColor Yellow
 try {
     # Upgrade pip first
     Write-Host "  Upgrading pip..." -ForegroundColor White
-    & .\.venv\Scripts\python.exe -m pip install --upgrade pip | Out-Null
+    $pipUpgradeOutput = & .\.venv\Scripts\python.exe -m pip install --upgrade pip 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip upgrade failed: $pipUpgradeOutput"
+    }
     
     # Install package in editable/local mode with recorder options
     Write-Host "  Installing teach-skill recorder packages..." -ForegroundColor White
-    & .\.venv\Scripts\python.exe -m pip install -e ".[recorder]"
+    $installOutput = & .\.venv\Scripts\python.exe -m pip install -e ".[recorder]" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dependency installation failed: $installOutput"
+    }
     
-    # Post-install win32 system integration hook
-    Write-Host "  Configuring Windows COM integration..." -ForegroundColor White
-    & .\.venv\Scripts\python.exe -c "import win32com.client" 2>&1 | Out-Null
+    # Verify recorder-only imports are available after installing extras
+    Write-Host "  Verifying recorder imports..." -ForegroundColor White
+    $verifyOutput = & .\.venv\Scripts\python.exe -c "import win32gui, win32process, win32clipboard, win32con, psutil; from PIL import Image; import pynput, pystray" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Recorder import verification failed: $verifyOutput"
+    }
     
     Write-Host "  Dependencies installed successfully." -ForegroundColor Green
 } catch {

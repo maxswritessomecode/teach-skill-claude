@@ -16,6 +16,7 @@ setup(
             "pynput",
             "Pillow",
             "pystray",
+            "psutil",
         ],
         "dev": [
             "pytest",

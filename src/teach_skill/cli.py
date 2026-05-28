@@ -8,9 +8,6 @@ import click
 from teach_skill import __version__
 from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk, save_skill
 from teach_skill.config import load_config
-from teach_skill.recorder.writer import EventWriter
-from teach_skill.recorder.controller import RecorderController
-from teach_skill.recorder.tray import RecorderTrayApp
 
 
 
@@ -105,6 +102,10 @@ def record(simulate: bool, auto_compile: bool):
     click.echo()
     click.echo("System Tray Icon created. Use the menu option to stop recording.")
     click.echo("Please grant accessibility/screen recording permissions if requested.")
+
+    from teach_skill.recorder.writer import EventWriter
+    from teach_skill.recorder.controller import RecorderController
+    from teach_skill.recorder.tray import RecorderTrayApp
 
     writer = EventWriter(session_dir)
     controller = RecorderController(writer, config)

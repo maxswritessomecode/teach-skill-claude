@@ -1,5 +1,6 @@
+import base64
 import shutil
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from teach_skill.compiler.parser import parse_recording, Recording
 from teach_skill.compiler.prompt import build_system_prompt, build_user_message
@@ -17,6 +18,17 @@ def check_claude_cli() -> bool:
     return shutil.which("claude") is not None
 
 
+def detect_image_media_type(path: Path) -> str | None:
+    header = path.read_bytes()[:32]
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 class SkillCompiler:
     def __init__(self, recording_path: Path):
         self.recording_path = recording_path
@@ -28,8 +40,46 @@ class SkillCompiler:
     def collect_screenshot_paths(self) -> list[Path]:
         if not self.recording:
             return []
-        base_dir = self.recording_path.parent
-        return [base_dir / p for p in self.recording.screenshot_paths]
+        return [path for path, _media_type in self.collect_screenshot_images()]
+
+    def collect_screenshot_images(self) -> list[tuple[Path, str]]:
+        if not self.recording:
+            return []
+
+        base_dir = self.recording_path.parent.resolve()
+        images = []
+        for raw_path in self.recording.screenshot_paths:
+            if raw_path.startswith("suppressed:"):
+                continue
+
+            windows_path = PureWindowsPath(raw_path)
+            if (
+                Path(raw_path).is_absolute()
+                or windows_path.is_absolute()
+                or raw_path.startswith("\\")
+            ):
+                continue
+
+            normalized_path = Path(*windows_path.parts)
+            if ".." in normalized_path.parts:
+                continue
+
+            path = (base_dir / normalized_path).resolve()
+            try:
+                path.relative_to(base_dir)
+            except ValueError:
+                continue
+
+            if not path.is_file():
+                continue
+
+            media_type = detect_image_media_type(path)
+            if media_type is None:
+                continue
+
+            images.append((path, media_type))
+
+        return images
 
     def build_prompt_payload(self) -> dict:
         if not self.recording:
@@ -38,6 +88,31 @@ class SkillCompiler:
             "system": build_system_prompt(),
             "user_message": build_user_message(self.recording),
             "screenshot_paths": [str(p) for p in self.collect_screenshot_paths()],
+        }
+
+    def build_image_block(self, path: Path, media_type: str) -> dict:
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+            },
+        }
+
+    async def iter_prompt_messages(self):
+        if not self.recording:
+            raise RuntimeError("Call load() before building prompt messages")
+
+        content = [{"type": "text", "text": build_user_message(self.recording)}]
+        for path, media_type in self.collect_screenshot_images():
+            content.append(self.build_image_block(path, media_type))
+
+        yield {
+            "type": "user",
+            "session_id": "",
+            "message": {"role": "user", "content": content},
+            "parent_tool_use_id": None,
         }
 
     async def compile(self) -> str:
@@ -58,7 +133,7 @@ class SkillCompiler:
 
         skill_text_blocks = []
         async for message in query(
-            prompt=payload["user_message"],
+            prompt=self.iter_prompt_messages(),
             options=options,
         ):
             if isinstance(message, AssistantMessage):

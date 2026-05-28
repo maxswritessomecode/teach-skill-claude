@@ -1,6 +1,5 @@
-import json
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch
 from click.testing import CliRunner
 from teach_skill.cli import main
 
@@ -29,24 +28,27 @@ When the user asks to update a quarterly report or send report summaries.
 """
 
 
+async def fake_compile(self):
+    return MOCK_SKILL
+
+
 def test_compile_loads_and_shows_recording():
     runner = CliRunner()
-    result = runner.invoke(main, ["compile", str(FIXTURE)], input="n\n")
+    with patch("teach_skill.cli.check_agent_sdk", return_value=True), \
+            patch("teach_skill.cli.SkillCompiler.compile", new=fake_compile):
+        result = runner.invoke(main, ["compile", str(FIXTURE)], input="n\n")
+
     assert "Events: 8" in result.output
     assert "Screenshots: 4" in result.output
+    assert "GENERATED SKILL" in result.output
+    assert "Skill discarded" in result.output
 
 
-def test_compile_full_flow_with_mock_sdk():
-    from claude_agent_sdk import AssistantMessage, TextBlock
-    
-    mock_block = TextBlock(text=MOCK_SKILL)
-    mock_message = AssistantMessage(content=[mock_block], model="claude-3")
+def test_compile_full_flow_with_mock_sdk(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
 
-    async def mock_query_generator(*args, **kwargs):
-        yield mock_message
-
-    with patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True), \
-         patch("claude_agent_sdk.query", new=mock_query_generator):
+    with patch("teach_skill.cli.check_agent_sdk", return_value=True), \
+            patch("teach_skill.cli.SkillCompiler.compile", new=fake_compile):
         runner = CliRunner()
         result = runner.invoke(
             main,
@@ -55,4 +57,10 @@ def test_compile_full_flow_with_mock_sdk():
         )
         assert "GENERATED SKILL" in result.output
         assert "update-q2-report" in result.output.lower()
-
+        assert (
+            tmp_path
+            / ".claude"
+            / "skills"
+            / "update-q2-report"
+            / "SKILL.md"
+        ).exists()

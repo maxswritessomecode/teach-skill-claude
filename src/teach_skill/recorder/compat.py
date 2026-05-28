@@ -1,6 +1,11 @@
 import sys
 from PIL import Image
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 # Dynamic import helper to mock Win32 modules on Mac/Linux
 if sys.platform == "win32":
     import win32gui
@@ -30,8 +35,14 @@ def get_active_window_info() -> dict:
             if not title:
                 title = "Unknown Window"
             
-            # Simple process name lookup
-            return {"process": f"pid_{pid}.exe", "title": title}
+            process_name = f"pid_{pid}.exe"
+            if psutil is not None:
+                try:
+                    process_name = psutil.Process(pid).name()
+                except Exception:
+                    pass
+
+            return {"process": process_name, "title": title}
         except Exception:
             return {"process": "unknown.exe", "title": "Unknown Window"}
     
@@ -61,4 +72,3 @@ def get_clipboard_text() -> str:
                 pass
             return ""
     return "mock_clipboard_text"
-

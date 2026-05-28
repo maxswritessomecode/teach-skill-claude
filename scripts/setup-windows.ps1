@@ -53,9 +53,8 @@ try {
     $gitVersion = git --version 2>&1
     Write-Host "  OK: $gitVersion" -ForegroundColor Green
 } catch {
-    Write-Host "  FAIL: Git not found" -ForegroundColor Red
-    Write-Host "  Install from: https://git-scm.com/download/win" -ForegroundColor Red
-    exit 1
+    Write-Host "  WARN: Git not found" -ForegroundColor Yellow
+    Write-Host "  Install from: https://git-scm.com/download/win if you plan to contribute" -ForegroundColor Yellow
 }
 
 # --- 4. Check Claude Code CLI ---
@@ -69,20 +68,18 @@ try {
     Write-Host "  (Not blocking — needed for compile step, not for development)" -ForegroundColor Yellow
 }
 
-# --- 5. Clone repo (if not already in it) ---
+# --- 5. Locate repository checkout ---
 Write-Host "[5/7] Setting up repository..." -ForegroundColor Yellow
-$projectDir = "$env:USERPROFILE\projects\teach-skill-antigravity"
+$projectDir = Split-Path -Parent $PSScriptRoot
 
-if (Test-Path "$projectDir\.git") {
-    Write-Host "  OK: Repo already cloned at $projectDir" -ForegroundColor Green
-    Set-Location $projectDir
-} else {
-    Write-Host "  Cloning repo to $projectDir..." -ForegroundColor White
-    New-Item -ItemType Directory -Path "$env:USERPROFILE\projects" -Force | Out-Null
-    git clone https://github.com/maxswritessomecode/teach-skill.git $projectDir
-    Set-Location $projectDir
-    Write-Host "  OK: Cloned to $projectDir" -ForegroundColor Green
+if (-not (Test-Path "$projectDir\setup.py")) {
+    Write-Host "  FAIL: Could not locate teach-skill checkout at $projectDir" -ForegroundColor Red
+    Write-Host "  Run this script from the repository's scripts directory." -ForegroundColor Red
+    exit 1
 }
+
+Set-Location $projectDir
+Write-Host "  OK: Using checkout at $projectDir" -ForegroundColor Green
 
 # --- 6. Create venv and install dependencies ---
 Write-Host "[6/7] Setting up virtual environment..." -ForegroundColor Yellow
@@ -94,7 +91,11 @@ try {
 
 if ($useUv) {
     if (-not (Test-Path ".venv")) {
-        uv venv
+        $uvVenvOutput = uv venv 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  FAIL: uv venv failed — $uvVenvOutput" -ForegroundColor Red
+            exit 1
+        }
         Write-Host "  Created .venv using uv" -ForegroundColor Green
     } else {
         Write-Host "  OK: .venv already exists" -ForegroundColor Green
@@ -104,11 +105,19 @@ if ($useUv) {
     & .\.venv\Scripts\Activate.ps1
     
     Write-Host "  Installing dependencies using uv..." -ForegroundColor White
-    uv pip install -e ".[recorder,dev]"
+    $uvInstallOutput = uv pip install -e ".[recorder,dev]" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  FAIL: uv dependency install failed — $uvInstallOutput" -ForegroundColor Red
+        exit 1
+    }
     Write-Host "  OK: Project and dependencies installed via uv" -ForegroundColor Green
 } else {
     if (-not (Test-Path ".venv")) {
-        python -m venv .venv
+        $venvOutput = python -m venv .venv 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  FAIL: Python venv creation failed — $venvOutput" -ForegroundColor Red
+            exit 1
+        }
         Write-Host "  Created .venv using standard Python" -ForegroundColor Green
     } else {
         Write-Host "  OK: .venv already exists" -ForegroundColor Green
@@ -118,8 +127,16 @@ if ($useUv) {
     & .\.venv\Scripts\Activate.ps1
     
     Write-Host "  Installing dependencies using pip..." -ForegroundColor White
-    pip install --upgrade pip | Out-Null
-    pip install -e ".[recorder,dev]"
+    $pipUpgradeOutput = pip install --upgrade pip 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  FAIL: pip upgrade failed — $pipUpgradeOutput" -ForegroundColor Red
+        exit 1
+    }
+    $pipInstallOutput = pip install -e ".[recorder,dev]" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  FAIL: pip dependency install failed — $pipInstallOutput" -ForegroundColor Red
+        exit 1
+    }
     Write-Host "  OK: Project and dependencies installed via pip" -ForegroundColor Green
 }
 
@@ -131,6 +148,7 @@ $checks = @(
     @{ Name = "pynput";          Test = "import pynput; print('ok')" },
     @{ Name = "Pillow";          Test = "from PIL import Image; print('ok')" },
     @{ Name = "pystray";         Test = "import pystray; print('ok')" },
+    @{ Name = "psutil";          Test = "import psutil; print('ok')" },
     @{ Name = "click";           Test = "import click; print('ok')" },
     @{ Name = "claude-agent-sdk"; Test = "import claude_agent_sdk; print('ok')" },
     @{ Name = "pytest";          Test = "import pytest; print('ok')" }
@@ -162,6 +180,7 @@ if ($allPassed) {
     Write-Host "`n  All checks passed!" -ForegroundColor Green
 } else {
     Write-Host "`n  Some checks failed — review errors above" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "`n  To activate the venv in future sessions:" -ForegroundColor Yellow

@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 from teach_skill.recorder.compat import get_active_window_info, capture_screenshot_stub
 
 
@@ -29,3 +30,66 @@ def test_get_clipboard_text_returns_string():
     if sys.platform != "win32":
         assert txt == "mock_clipboard_text"
 
+
+def test_active_window_info_uses_real_process_name_on_windows(monkeypatch):
+    from teach_skill.recorder import compat
+
+    monkeypatch.setattr(compat.sys, "platform", "win32")
+    monkeypatch.setattr(compat.win32gui, "GetForegroundWindow", lambda: 100)
+    monkeypatch.setattr(
+        compat.win32process,
+        "GetWindowThreadProcessId",
+        lambda hwnd: (1, 1234),
+    )
+    monkeypatch.setattr(compat.win32gui, "GetWindowText", lambda hwnd: "Quarterly Report")
+    monkeypatch.setattr(
+        compat,
+        "psutil",
+        SimpleNamespace(Process=lambda pid: SimpleNamespace(name=lambda: "EXCEL.EXE")),
+    )
+
+    assert get_active_window_info() == {
+        "process": "EXCEL.EXE",
+        "title": "Quarterly Report",
+    }
+
+
+def test_active_window_info_falls_back_when_process_name_lookup_fails(monkeypatch):
+    from teach_skill.recorder import compat
+
+    def raise_lookup_error(pid):
+        raise RuntimeError("process exited")
+
+    monkeypatch.setattr(compat.sys, "platform", "win32")
+    monkeypatch.setattr(compat.win32gui, "GetForegroundWindow", lambda: 100)
+    monkeypatch.setattr(
+        compat.win32process,
+        "GetWindowThreadProcessId",
+        lambda hwnd: (1, 1234),
+    )
+    monkeypatch.setattr(compat.win32gui, "GetWindowText", lambda hwnd: "Quarterly Report")
+    monkeypatch.setattr(compat, "psutil", SimpleNamespace(Process=raise_lookup_error))
+
+    assert get_active_window_info() == {
+        "process": "pid_1234.exe",
+        "title": "Quarterly Report",
+    }
+
+
+def test_active_window_info_uses_pid_fallback_when_psutil_missing(monkeypatch):
+    from teach_skill.recorder import compat
+
+    monkeypatch.setattr(compat.sys, "platform", "win32")
+    monkeypatch.setattr(compat.win32gui, "GetForegroundWindow", lambda: 100)
+    monkeypatch.setattr(
+        compat.win32process,
+        "GetWindowThreadProcessId",
+        lambda hwnd: (1, 1234),
+    )
+    monkeypatch.setattr(compat.win32gui, "GetWindowText", lambda hwnd: "Quarterly Report")
+    monkeypatch.setattr(compat, "psutil", None)
+
+    assert get_active_window_info() == {
+        "process": "pid_1234.exe",
+        "title": "Quarterly Report",
+    }
