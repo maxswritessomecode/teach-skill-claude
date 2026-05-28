@@ -25,6 +25,8 @@ class RecorderController:
         self.is_recording = True
         self.start_time = time.time()
         self.last_screenshot_time = 0
+        self.last_screenshot_frame_id = None
+        self.last_screenshot_frame_path = None
         self.in_app_capture_interval_s = 5.0
         
         # Write initial metadata event
@@ -69,12 +71,11 @@ class RecorderController:
             self.start_time = time.time()
 
     def on_click(self, x, y, button, pressed):
-        self.input_counter.on_click(x, y, button, pressed)
         if not self.is_recording or not pressed:
             return
         if not self.window_tracker.last_process:
-            return
-        if time.time() - self.last_screenshot_time < self.in_app_capture_interval_s:
+            self.on_window_switch(get_active_window_info())
+        if not self.window_tracker.last_process:
             return
 
         current_info = get_active_window_info()
@@ -83,16 +84,43 @@ class RecorderController:
             or current_info.get("title") != self.window_tracker.last_title
         ):
             self.on_window_switch(current_info)
+
+        self.input_counter.on_click(x, y, button, pressed)
+        if time.time() - self.last_screenshot_time >= self.in_app_capture_interval_s:
+            self.capture_screenshot(
+                {
+                    "process": self.window_tracker.last_process,
+                    "title": self.window_tracker.last_title,
+                },
+                event_type="in_app_capture",
+                trigger="click_after_5s",
+            )
+
+        self.write_click_event(x, y, button)
+
+    def write_click_event(self, x, y, button):
+        if self.privacy.is_sensitive_title(self.window_tracker.last_title):
+            self.writer.write_event({
+                "type": "click",
+                "process": self.window_tracker.last_process,
+                "title": "[auth/login - redacted]",
+                "details_redacted": "sensitive_title",
+            })
             return
 
-        self.capture_screenshot(
-            {
-                "process": self.window_tracker.last_process,
-                "title": self.window_tracker.last_title,
-            },
-            event_type="in_app_capture",
-            trigger="click_after_5s",
-        )
+        event = {
+            "type": "click",
+            "process": self.window_tracker.last_process,
+            "title": self.privacy.redact_title(self.window_tracker.last_title),
+            "x": x,
+            "y": y,
+            "button": str(button) if button is not None else None,
+        }
+        if self.last_screenshot_frame_id:
+            event["screenshot_frame_id"] = self.last_screenshot_frame_id
+        if self.last_screenshot_frame_path:
+            event["screenshot_frame_path"] = self.last_screenshot_frame_path
+        self.writer.write_event(event)
 
     def on_press(self, key):
         self.input_counter.on_press(key)
@@ -118,6 +146,8 @@ class RecorderController:
         # Apply privacy filter guards
         title = window_info.get("title", "")
         if self.privacy.is_sensitive_title(title):
+            self.last_screenshot_frame_id = None
+            self.last_screenshot_frame_path = None
             event = {
                 "type": event_type,
                 "process": window_info.get("process"),
@@ -133,12 +163,17 @@ class RecorderController:
         frame_path = self.writer.next_frame_path()
         img = capture_screenshot_stub()
         img.save(frame_path)
+        frame_id = frame_path.stem
+        relative_frame_path = str(frame_path.relative_to(self.writer.session_dir))
+        self.last_screenshot_frame_id = frame_id
+        self.last_screenshot_frame_path = relative_frame_path
         
         event = {
             "type": event_type,
             "process": window_info.get("process"),
             "title": title,
-            "screenshot": str(frame_path.relative_to(self.writer.session_dir))
+            "screenshot": relative_frame_path,
+            "frame_id": frame_id
         }
         if trigger:
             event["trigger"] = trigger

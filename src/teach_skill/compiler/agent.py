@@ -29,6 +29,13 @@ def detect_image_media_type(path: Path) -> str | None:
     return None
 
 
+def _screenshot_frame_id(raw_path: str, event: dict) -> str:
+    frame_id = event.get("frame_id")
+    if frame_id:
+        return str(frame_id)
+    return Path(*PureWindowsPath(raw_path).parts).stem
+
+
 class SkillCompiler:
     def __init__(self, recording_path: Path):
         self.recording_path = recording_path
@@ -43,12 +50,22 @@ class SkillCompiler:
         return [path for path, _media_type in self.collect_screenshot_images()]
 
     def collect_screenshot_images(self) -> list[tuple[Path, str]]:
+        return [
+            (path, media_type)
+            for path, media_type, _frame_id, _raw_path in
+            self.collect_screenshot_image_details()
+        ]
+
+    def collect_screenshot_image_details(self) -> list[tuple[Path, str, str, str]]:
         if not self.recording:
             return []
 
         base_dir = self.recording_path.parent.resolve()
         images = []
-        for raw_path in self.recording.screenshot_paths:
+        for event in self.recording.events:
+            raw_path = event.get("screenshot")
+            if not raw_path:
+                continue
             if raw_path.startswith("suppressed:"):
                 continue
 
@@ -77,7 +94,12 @@ class SkillCompiler:
             if media_type is None:
                 continue
 
-            images.append((path, media_type))
+            images.append((
+                path,
+                media_type,
+                _screenshot_frame_id(raw_path, event),
+                str(normalized_path),
+            ))
 
         return images
 
@@ -105,7 +127,11 @@ class SkillCompiler:
             raise RuntimeError("Call load() before building prompt messages")
 
         content = [{"type": "text", "text": build_user_message(self.recording)}]
-        for path, media_type in self.collect_screenshot_images():
+        for path, media_type, frame_id, raw_path in self.collect_screenshot_image_details():
+            content.append({
+                "type": "text",
+                "text": f"Screen {frame_id}: {raw_path}",
+            })
             content.append(self.build_image_block(path, media_type))
 
         yield {

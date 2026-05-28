@@ -58,3 +58,64 @@ def test_recording_timeline_text():
     assert "chrome.exe" in text
     assert "outlook.exe" in text
     assert "Google Sheets" in text
+
+
+def test_recording_timeline_text_includes_structured_clicks(tmp_path):
+    recording = tmp_path / "recording.jsonl"
+    recording.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "recording_meta", "machine": "X"}),
+                json.dumps(
+                    {
+                        "ts": "2026-05-28T15:00:00Z",
+                        "type": "window_switch",
+                        "process": "chrome.exe",
+                        "title": "Workflow",
+                        "screenshot": "frames/0001.png",
+                        "frame_id": "0001",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "ts": "2026-05-28T15:00:01Z",
+                        "type": "click",
+                        "process": "chrome.exe",
+                        "title": "Workflow",
+                        "x": 42,
+                        "y": 84,
+                        "button": "Button.left",
+                        "screenshot_frame_id": "0001",
+                    }
+                ),
+            ]
+        )
+    )
+
+    text = parse_recording(recording).timeline_text()
+
+    assert "[2026-05-28T15:00:01Z] Clicked Button.left at (42, 84)" in text
+    assert "chrome.exe" in text
+    assert "screen: 0001" in text
+
+
+def test_recording_timeline_text_describes_missing_click_button(tmp_path):
+    recording = tmp_path / "recording.jsonl"
+    recording.write_text(
+        json.dumps(
+            {
+                "ts": "2026-05-28T15:00:01Z",
+                "type": "click",
+                "process": "chrome.exe",
+                "title": "Workflow",
+                "x": 42,
+                "y": 84,
+                "button": None,
+            }
+        )
+    )
+
+    text = parse_recording(recording).timeline_text()
+
+    assert "Clicked unknown button at (42, 84)" in text
+    assert "Clicked None" not in text

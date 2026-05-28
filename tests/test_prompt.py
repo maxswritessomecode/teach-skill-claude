@@ -22,6 +22,12 @@ def test_system_prompt_mentions_screenshots_as_primary():
     assert "primary" in prompt.lower()
 
 
+def test_system_prompt_mentions_click_coordinates():
+    prompt = build_system_prompt()
+    assert "click coordinates" in prompt.lower()
+    assert "frame" in prompt.lower()
+
+
 def test_user_message_contains_timeline():
     rec = parse_recording(FIXTURE)
     msg = build_user_message(rec)

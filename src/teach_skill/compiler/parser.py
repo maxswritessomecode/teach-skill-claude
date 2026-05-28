@@ -25,9 +25,32 @@ class Recording:
             etype = event["type"]
 
             if etype == "window_switch":
-                lines.append(f"[{ts}] Switched to: {event['process']} — \"{event.get('title', '')}\"")
+                screen = _screen_suffix(event.get("frame_id"))
+                lines.append(
+                    f"[{ts}] Switched to: {event['process']} — "
+                    f"\"{event.get('title', '')}\"{screen}"
+                )
             elif etype == "in_app_capture":
-                lines.append(f"[{ts}] In-app action in: {event['process']} — \"{event.get('title', '')}\"")
+                screen = _screen_suffix(event.get("frame_id"))
+                lines.append(
+                    f"[{ts}] In-app action in: {event['process']} — "
+                    f"\"{event.get('title', '')}\"{screen}"
+                )
+            elif etype == "click":
+                screen = _screen_suffix(event.get("screenshot_frame_id"))
+                button = event.get("button") or "unknown button"
+                if event.get("details_redacted"):
+                    lines.append(
+                        f"[{ts}] Click details redacted "
+                        f"in: {event['process']} — \"{event.get('title', '')}\""
+                    )
+                    lines.append("")
+                    continue
+                lines.append(
+                    f"[{ts}] Clicked {button} "
+                    f"at ({event.get('x', '?')}, {event.get('y', '?')}) "
+                    f"in: {event['process']} — \"{event.get('title', '')}\"{screen}"
+                )
             elif etype == "clipboard_text":
                 lines.append(f"[{ts}] Clipboard copied: \"{event.get('content', '')}\"")
             elif etype == "session_end":
@@ -38,6 +61,12 @@ class Recording:
             lines.append("")
 
         return "\n".join(lines)
+
+
+def _screen_suffix(frame_id: str | None) -> str:
+    if not frame_id:
+        return ""
+    return f" (screen: {frame_id})"
 
 
 def parse_recording(jsonl_path: Path) -> Recording:

@@ -60,6 +60,26 @@ def test_compiler_prompt_stream_attaches_screenshot_image_blocks():
     assert image_blocks[0]["source"]["data"]
 
 
+def test_compiler_prompt_stream_labels_screenshot_image_blocks():
+    compiler = SkillCompiler(FIXTURE)
+    compiler.load()
+
+    messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+    content = messages[0]["message"]["content"]
+
+    labels = [
+        block["text"]
+        for block in content
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+    assert labels == [
+        "Screen 0001: frames/0001.png",
+        "Screen 0002: frames/0002.png",
+        "Screen 0003: frames/0003.png",
+        "Screen 0004: frames/0004.png",
+    ]
+
+
 def test_compiler_prompt_stream_skips_unsafe_missing_and_non_image_screenshots(tmp_path):
     from PIL import Image
 
@@ -136,6 +156,13 @@ def test_compiler_prompt_stream_skips_unsafe_missing_and_non_image_screenshots(t
     ]
     assert len(image_blocks) == 1
     assert base64.b64decode(image_blocks[0]["source"]["data"]) == safe_frame.read_bytes()
+
+    labels = [
+        block["text"]
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+    assert labels == ["Screen safe: frames/safe.png"]
 
 
 def test_compiler_prompt_stream_rejects_windows_absolute_and_backslash_traversal(tmp_path):
