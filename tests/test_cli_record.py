@@ -30,13 +30,13 @@ def test_record_fails_on_non_windows_by_default():
         assert "Recording is only supported on Windows" in result.output
 
 
-def test_record_runs_in_simulation_mode():
+def test_record_runs_in_test_mode():
     runner = CliRunner()
     with patch("teach_skill.recorder.tray.RecorderTrayApp") as mock_app_class:
         mock_app = MagicMock()
         mock_app_class.return_value = mock_app
         
-        result = runner.invoke(main, ["record", "--simulate"])
+        result = runner.invoke(main, ["record", "--test-mode"])
         assert result.exit_code == 0
         assert "Starting recorder session..." in result.output
         mock_app.start.assert_called_once()

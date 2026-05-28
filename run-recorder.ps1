@@ -1,4 +1,4 @@
-# Teach Skill — Easy Recorder Launcher for Windows
+# Teach Skill Claude - Easy Recorder Launcher for Windows
 # Usage: .\run-recorder.ps1
 
 $ErrorActionPreference = "Stop"
@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # Navigate to script's own folder to support relative executions
 Set-Location $PSScriptRoot
 
-Write-Host "`n=== Teach Skill Launcher ===" -ForegroundColor Cyan
+Write-Host "`n=== Teach Skill Claude Launcher ===" -ForegroundColor Cyan
 
 # 1. Detect and ensure virtual environment
 if (-not (Test-Path ".venv")) {

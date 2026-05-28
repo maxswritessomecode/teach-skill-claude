@@ -28,10 +28,10 @@ class RecorderTrayApp:
         # Create system tray icon
         image = create_tray_icon_image()
         menu = pystray.Menu(
-            pystray.MenuItem("Teach Skill (Recording...)", lambda: None, enabled=False),
+            pystray.MenuItem("Teach Skill Claude (Recording...)", lambda: None, enabled=False),
             pystray.MenuItem("Stop Recording & Compile", self.on_stop),
         )
-        self.icon = pystray.Icon("teach-skill", image, "Teach Skill Recorder", menu)
+        self.icon = pystray.Icon("teach-skill-claude", image, "Teach Skill Claude Recorder", menu)
 
         # Start input listeners in background threads
         self.start_listeners()

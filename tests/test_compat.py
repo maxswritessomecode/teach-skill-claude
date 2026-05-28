@@ -10,7 +10,7 @@ def test_active_window_info_returns_dict():
     assert "title" in info
 
 
-def test_active_window_stub_returns_mock_on_non_windows():
+def test_active_window_info_returns_test_fallback_when_win32_is_unavailable():
     if sys.platform != "win32":
         info = get_active_window_info()
         assert info["process"] == "mock_process.exe"

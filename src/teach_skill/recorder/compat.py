@@ -6,14 +6,14 @@ try:
 except ImportError:
     psutil = None
 
-# Dynamic import helper to mock Win32 modules on Mac/Linux
+# Dynamic import helper for Win32 modules with safe test fallbacks.
 if sys.platform == "win32":
     import win32gui
     import win32process
     import win32clipboard
     import win32con
 else:
-    # Stubs for non-Windows platforms
+    # Test fallback stubs used when native recording APIs are unavailable.
     class MockWin32:
         def __getattr__(self, name):
             return lambda *args, **kwargs: 0
@@ -50,7 +50,7 @@ def get_active_window_info() -> dict:
 
 
 def capture_screenshot_stub() -> Image.Image:
-    # Fallback capture creating a colored box on Mac/Linux
+    # Test fallback capture used when native screen capture is unavailable.
     if sys.platform == "win32":
         from PIL import ImageGrab
         return ImageGrab.grab()

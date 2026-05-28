@@ -1,10 +1,10 @@
-# Teach Skill — Windows Development Environment Setup
+# Teach Skill Claude - Windows Development Environment Setup
 # Run in PowerShell as Administrator (right-click > Run as Administrator)
 # Usage: .\scripts\setup-windows.ps1
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "`n=== Teach Skill — Windows Setup ===" -ForegroundColor Cyan
+Write-Host "`n=== Teach Skill Claude - Windows Setup ===" -ForegroundColor Cyan
 Write-Host ""
 
 # --- 1. Check Python ---
@@ -73,7 +73,7 @@ Write-Host "[5/7] Setting up repository..." -ForegroundColor Yellow
 $projectDir = Split-Path -Parent $PSScriptRoot
 
 if (-not (Test-Path "$projectDir\setup.py")) {
-    Write-Host "  FAIL: Could not locate teach-skill checkout at $projectDir" -ForegroundColor Red
+    Write-Host "  FAIL: Could not locate Teach Skill Claude checkout at $projectDir" -ForegroundColor Red
     Write-Host "  Run this script from the repository's scripts directory." -ForegroundColor Red
     exit 1
 }
@@ -104,6 +104,9 @@ if ($useUv) {
     # Activate venv
     & .\.venv\Scripts\Activate.ps1
     
+    Write-Host "  Removing old package metadata if present..." -ForegroundColor White
+    $null = uv pip uninstall teach-skill 2>&1
+
     Write-Host "  Installing dependencies using uv..." -ForegroundColor White
     $uvInstallOutput = uv pip install -e ".[recorder,dev]" 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -126,6 +129,9 @@ if ($useUv) {
     # Activate venv
     & .\.venv\Scripts\Activate.ps1
     
+    Write-Host "  Removing old package metadata if present..." -ForegroundColor White
+    $null = pip uninstall -y teach-skill 2>&1
+
     Write-Host "  Installing dependencies using pip..." -ForegroundColor White
     $pipUpgradeOutput = pip install --upgrade pip 2>&1
     if ($LASTEXITCODE -ne 0) {

@@ -4,10 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_setup_windows_uses_current_checkout_instead_of_cloning_antigravity():
+def test_setup_windows_uses_current_checkout_instead_of_cloning_remote_repo():
     text = (ROOT / "scripts" / "setup-windows.ps1").read_text()
 
-    assert "teach-skill-antigravity" not in text
     assert "git clone" not in text
     assert "$projectDir = Split-Path -Parent $PSScriptRoot" in text
 
@@ -15,6 +14,7 @@ def test_setup_windows_uses_current_checkout_instead_of_cloning_antigravity():
 def test_install_fails_when_recorder_import_verification_fails():
     text = (ROOT / "install.ps1").read_text()
 
+    assert "pip uninstall -y teach-skill" in text
     assert "$pipUpgradeOutput = & .\\.venv\\Scripts\\python.exe -m pip install --upgrade pip" in text
     assert "$installOutput = & .\\.venv\\Scripts\\python.exe -m pip install -e" in text
     assert "$verifyOutput = & .\\.venv\\Scripts\\python.exe -c" in text
@@ -26,6 +26,8 @@ def test_install_fails_when_recorder_import_verification_fails():
 def test_setup_windows_fails_when_dependency_install_or_checks_fail():
     text = (ROOT / "scripts" / "setup-windows.ps1").read_text()
 
+    assert "uv pip uninstall teach-skill" in text
+    assert "pip uninstall -y teach-skill" in text
     assert "$uvInstallOutput = uv pip install -e" in text
     assert "$pipInstallOutput = pip install -e" in text
     assert "exit 1" in text[text.index("if ($allPassed)"):]

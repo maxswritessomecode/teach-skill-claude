@@ -1,118 +1,84 @@
-# Teach Skill - Cross-Platform Development & Sync Guide
+# Teach Skill Claude Development Guide
 
-This document outlines the architecture, network route, SSH configuration, keylogger features, and step-by-step guides for running personal compile loops and distributing the Windows recorder to testers.
+This guide is for people changing the project, not for basic recorder users.
 
----
+For normal use, start with the root `README.md`.
 
-## 1. Project Architecture
+## Project Goal
 
-The system utilizes a split-host design: a **Windows Recorder** captures desktop actions (keystrokes, mouse clicks, and active window titles) and a **Mac Studio Compiler** processes that data via the Claude Agent SDK to generate structured `SKILL.md` skill blueprints.
+Teach Skill Claude records a Windows desktop workflow and compiles the recording into a Claude Code `SKILL.md` file.
 
-```mermaid
-flowchart TD
-    subgraph Windows ["Windows Laptop (192.168.1.156)"]
-        A[teach-skill record] -->|Capture input & active windows| B[(Local Telemetry JSONL & Frames)]
-        SSH_S[OpenSSH Server] <---|"Secure Shell / Command Execution"| SSH_C
-    end
+The intended user flow is:
 
-    subgraph Sync ["Dropbox Sync Folder"]
-        B -->|Dropbox Desktop Sync| C[(Dropbox Shared Folder)]
-    end
+1. Install on Windows.
+2. Record a task from the tray app.
+3. Stop recording.
+4. Compile the generated `recording.jsonl`.
+5. Review and save the generated skill.
 
-    subgraph Mac ["Mac Studio (Development Host)"]
-        C -->|Read Sync Folder| D[teach-skill compile]
-        D -->|Agent SDK / LLM Queries| E[Claude Code CLI]
-        SSH_C[OpenSSH Client]
-    end
-```
+## Main Components
 
----
+- `install.ps1` - simple installer for users
+- `run-recorder.ps1` - PowerShell launcher for the recorder
+- `scripts\setup-windows.ps1` - contributor setup and dependency checks
+- `src\teach_skill\recorder\` - recorder controller, tray app, screenshots, input events, privacy filters
+- `src\teach_skill\compiler\` - parser, prompt builder, image attachment handling, Claude Agent SDK compiler
+- `tests\` - automated coverage for recorder, compiler, CLI, and installer behavior
 
-## 2. Personal Setup & Connection Verification
+## Contributor Setup
 
-The Mac Studio accesses the Windows Laptop remotely without password prompts using a secure OpenSSH key pair.
+Run PowerShell from the project root:
 
-### Mac Studio Commands
-- **Key Generation**: `ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519`
-- **Verify Passwordless Link**:
-  ```bash
-  ssh -o BatchMode=yes -o ConnectTimeout=3 marti@192.168.1.156 "echo success"
-  ```
-- **Remote Windows PowerShell Execution**:
-  ```bash
-  ssh marti@192.168.1.156 "powershell -Command \"Get-Service sshd\""
-  ```
-
-### Windows Laptop Commands (PowerShell as Admin)
-If you ever need to re-install or re-authorize the SSH Server:
 ```powershell
-# Install OpenSSH Server
-Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-
-# Start and set to automatic
-Start-Service sshd
-Set-Service -Name sshd -StartupType 'Automatic'
-
-# Open Firewall Port 22
-New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+.\scripts\setup-windows.ps1
 ```
 
----
+This creates `.venv`, installs the package in editable mode, installs recorder dependencies, and verifies required imports.
 
-## 3. Enable / Disable Raw Keystroke Capturing
+## Run Tests
 
-For maximum privacy, **raw character logging is disabled by default**. The recorder only tracks the total count of key presses (e.g., `keystroke_count: 47`).
+After setup:
 
-If you want the compiler to capture the exact characters you type (useful for automating spreadsheet formulas, specific terminal commands, or file names):
-
-1. Open `C:\Users\marti\.teach-skill\config.json` on the Windows Laptop.
-2. Toggle `"capture_raw_keystrokes"` to `true`:
-   ```json
-   {
-     "hotkey_toggle": "ctrl+shift+t",
-     "hotkey_pause": "ctrl+shift+p",
-     "storage_path": "C:\\Users\\marti\\Dropbox\\sync\\recordings",
-     "screenshot_resolution": "native",
-     "privacy_filter": true,
-     "capture_raw_keystrokes": true
-   }
-   ```
-3. The recorder will now securely reconstruct your typing locally (supporting letters, symbols, spaces, newlines, and gracefully correcting typing errors when you hit `Backspace`).
-
----
-
-## 4. Development Watcher & Compile Loop
-
-To automate the development process, an active watch script on your Mac Studio continuously scans for new Dropbox recording folders and instantly compiles them.
-
-### Mac Watcher Launch
-```bash
-python3 ~/scripts/teach_skill_watcher.py
-```
-*Leave this terminal window open. It polls for recordings every 5 seconds, compiles them via the Agent SDK, and saves the output locally under `.claude/skills/`.*
-
-### Compilation Options (Manual)
-To compile a recording manually without prompt blocks, run:
-```bash
-.venv/bin/teach-skill compile <recording.jsonl> --yes --local --name <custom-skill-name>
+```powershell
+pytest tests -q
 ```
 
----
+## Manual Smoke Test
 
-## 5. Sharing with External Testers
+Use this before handing a build to someone else:
 
-To share the Windows telemetry recorder with other Windows testers who already have the Claude Code CLI and Desktop app, distribute the lightweight package.
+1. Run `.\install.ps1`.
+2. Double-click `Start Teach Skill Claude.bat` on the Desktop.
+3. Open Notepad, type a short sentence, and save a test file.
+4. Stop the recorder from the tray icon.
+5. Confirm a new folder exists under `$env:USERPROFILE\.teach-skill\recordings`.
+6. Compile the new `recording.jsonl`:
 
-### Location of Tester Assets (Mac Studio)
-- **PowerShell Installer**: `/Users/martinshin/projects/teach-skill-antigravity/install.ps1`
-- **Tester Zip Package**: `/Users/martinshin/Library/CloudStorage/Dropbox/sync/teach-skill-antigravity.zip`
+```powershell
+.\.venv\Scripts\Activate.ps1
+teach-skill compile "$env:USERPROFILE\.teach-skill\recordings\<recording-folder>\recording.jsonl"
+```
 
-### Step-by-Step Tester Guide
-Provide this guide to your testers:
+## Privacy Checklist
 
-1. **Unzip** the `teach-skill-antigravity.zip` archive into any directory.
-2. **Right-click `install.ps1`** inside the folder and select **"Run with PowerShell"**.
-   - This sets up the virtual environment, installs the required Windows tray libraries (`pystray`, `pynput`), and creates a shortcut named **"Start Teach Skill"** on their Windows Desktop.
-3. **Double-click "Start Teach Skill"** on the Desktop to launch the recorder daemon.
-4. Right-click the **red tray icon** and choose **"Stop Recording"** when finished.
-5. Send the timestamped recording folder (located under `C:\Users\<Username>\.teach-skill\recordings\`) to the compile host!
+Before testing with real work systems:
+
+- Confirm the user has permission to record the workflow.
+- Avoid passwords, MFA prompts, client data, bank portals, and production secrets.
+- Keep `privacy_filter` enabled unless the recording is known to be safe.
+- Delete recordings when they are no longer needed.
+
+## Release Checklist
+
+Before committing:
+
+```powershell
+pytest tests -q
+git diff --check
+```
+
+Before sharing with users:
+
+- Confirm README install steps still match `install.ps1`.
+- Confirm the Desktop launcher starts the recorder.
+- Confirm compile output is reviewed before saving.

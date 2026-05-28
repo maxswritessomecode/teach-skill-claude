@@ -14,7 +14,7 @@ from teach_skill.config import load_config
 @click.group()
 @click.version_option(version=__version__)
 def main():
-    """Teach Skill — record workflows, compile Claude Code skills."""
+    """Teach Skill Claude - record workflows, compile Claude Code skills."""
     pass
 
 
@@ -81,13 +81,13 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
 
 
 @main.command()
-@click.option("--simulate", is_flag=True, help="Simulate recording on non-Windows platforms.")
+@click.option("--test-mode", is_flag=True, hidden=True)
 @click.option("--auto-compile", is_flag=True, help="Automatically compile the recording into a skill when stopped.")
-def record(simulate: bool, auto_compile: bool):
-    """Start the Teach Skill recorder (Windows only)."""
-    if sys.platform != "win32" and not simulate:
+def record(test_mode: bool, auto_compile: bool):
+    """Start the Teach Skill Claude recorder (Windows only)."""
+    if sys.platform != "win32" and not test_mode:
         click.echo("Error: Recording is only supported on Windows.", err=True)
-        click.echo("To simulate recording on Mac/Linux, run with --simulate.", err=True)
+        click.echo("Run this command on a Windows 10 or Windows 11 computer.", err=True)
         sys.exit(1)
 
     config = load_config()
@@ -101,7 +101,7 @@ def record(simulate: bool, auto_compile: bool):
     click.echo(f"  {session_dir}")
     click.echo()
     click.echo("System Tray Icon created. Use the menu option to stop recording.")
-    click.echo("Please grant accessibility/screen recording permissions if requested.")
+    click.echo("Please grant Windows permissions if requested.")
 
     from teach_skill.recorder.writer import EventWriter
     from teach_skill.recorder.controller import RecorderController

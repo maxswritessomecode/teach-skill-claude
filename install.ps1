@@ -1,4 +1,4 @@
-# Teach Skill - Windows Tester Installation Script
+# Teach Skill Claude - Windows Installation Script
 # Run in PowerShell (no admin elevation required if Python is already installed!)
 # Usage: Double-click or run .\install.ps1 in PowerShell from the extracted folder.
 
@@ -6,10 +6,10 @@ $ErrorActionPreference = "Stop"
 Clear-Host
 
 Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "      Teach Skill - Windows Installer        " -ForegroundColor Cyan
+Write-Host "      Teach Skill Claude - Windows Installer " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "This script will set up the Teach Skill recorder on your system." -ForegroundColor White
+Write-Host "This script will set up the Teach Skill Claude recorder on your system." -ForegroundColor White
 Write-Host "Requirements: Python 3.10+ must be installed." -ForegroundColor Yellow
 Write-Host ""
 
@@ -64,8 +64,12 @@ try {
         throw "pip upgrade failed: $pipUpgradeOutput"
     }
     
+    # Remove old editable package metadata from earlier project names, if present.
+    Write-Host "  Removing old package metadata if present..." -ForegroundColor White
+    $null = & .\.venv\Scripts\python.exe -m pip uninstall -y teach-skill 2>&1
+
     # Install package in editable/local mode with recorder options
-    Write-Host "  Installing teach-skill recorder packages..." -ForegroundColor White
+    Write-Host "  Installing Teach Skill Claude recorder packages..." -ForegroundColor White
     $installOutput = & .\.venv\Scripts\python.exe -m pip install -e ".[recorder]" 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Dependency installation failed: $installOutput"
@@ -120,13 +124,13 @@ Write-Host "Creating a double-clickable launcher on your Desktop..." -Foreground
 
 $desktopPath = [System.IO.Path]::Combine($env:USERPROFILE, "Desktop")
 $launcherFile = Join-Path $currentDir "Start-Recorder.bat"
-$desktopLauncher = Join-Path $desktopPath "Start Teach Skill.bat"
+$desktopLauncher = Join-Path $desktopPath "Start Teach Skill Claude.bat"
 
 $launcherContent = @"
 @echo off
 cd /d "%~dp0"
 echo =========================================
-echo       Starting Teach Skill Recorder      
+echo       Starting Teach Skill Claude Recorder
 echo =========================================
 echo Use the System Tray icon to stop recording.
 echo.
@@ -145,7 +149,7 @@ cd /d "$currentDir"
 Set-Content -Path $desktopLauncher -Value $desktopLauncherContent -Force
 
 Write-Host "  [✓] Created launcher in folder: Start-Recorder.bat" -ForegroundColor Green
-Write-Host "  [✓] Created launcher on Desktop: Start Teach Skill.bat" -ForegroundColor Green
+Write-Host "  [✓] Created launcher on Desktop: Start Teach Skill Claude.bat" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Green
@@ -153,12 +157,12 @@ Write-Host "         INSTALLATION SUCCESSFUL!            " -ForegroundColor Gree
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "How to start recording:" -ForegroundColor White
-Write-Host "  Simply double-click the 'Start Teach Skill' shortcut on your Desktop!" -ForegroundColor Cyan
+Write-Host "  Simply double-click the 'Start Teach Skill Claude' shortcut on your Desktop!" -ForegroundColor Cyan
 Write-Host "  When done, right-click the red circle tray icon and choose 'Stop Recording'." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Share the 'recordings' directory inside: " -ForegroundColor White
+Write-Host "Your recordings are saved inside: " -ForegroundColor White
 Write-Host "  $configDir" -ForegroundColor Yellow
-Write-Host "with your compile host to generate skills!" -ForegroundColor White
+Write-Host "Use the README compile command to turn a recording into a skill." -ForegroundColor White
 Write-Host ""
 
 Read-Host "Press Enter to finish..."

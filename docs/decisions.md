@@ -1,4 +1,4 @@
-# Teach Skill — Design Decisions Log
+# Teach Skill Claude Design Decisions Log
 
 ## D1: User trigger model
 **Question:** How does the user signal "I'm done, compile the skill"?
@@ -67,7 +67,7 @@
 **Question:** What's the installation story for end users?
 | Option | Description |
 |--------|-------------|
-| 1. `pip install teach-skill` | Publish to PyPI. Clean but requires Python on target. |
+| 1. `pip install teach-skill-claude` | Publish to PyPI. Clean but requires Python on target. |
 | 2. Single `.exe` bundle | PyInstaller package. Zero-friction but heavier build step. |
 | **3. Git clone + pip install** | **Clone repo, install from source. Fast to ship for POC.** |
 **Decision:** Option 3 — Clone + install for POC. Option 2 (.exe) is the future distribution goal once concept is validated.
@@ -107,4 +107,4 @@
 **Decision:** Capture at native resolution. Compiler resizes before sending to Claude. Avoids HiDPI/4K scaling making text unreadable at 1280px.
 
 ## D14: Prompt strategy (from Gemini review)
-**Decision:** System prompt instructs Claude to treat screenshots as primary source of truth for the workflow sequence, using JSONL timeline as timestamps and structural markers. Compensates for sparse telemetry text (no raw keystrokes/coordinates).
+**Decision:** System prompt instructs Claude to treat screenshots as primary source of truth for the workflow sequence, using JSONL timeline as timestamps, click coordinates, frame references, and structural markers. Compensates for sparse telemetry text while keeping raw keystrokes disabled by default.

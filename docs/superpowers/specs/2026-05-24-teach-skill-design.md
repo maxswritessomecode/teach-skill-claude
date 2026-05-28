@@ -1,13 +1,13 @@
-# Teach Skill — Design Specification
+# Teach Skill Claude Design Specification
 
 **Date:** 2026-05-24
 **Status:** POC
-**Repo:** https://github.com/maxswritessomecode/teach-skill
+**Repo:** https://github.com/maxswritessomecode/teach-skill-claude
 **Platform:** Windows
 
 ## Overview
 
-Teach Skill is a Windows desktop tool that records user workflow telemetry and compiles it into Claude Code skills (SKILL.md). Two target audiences:
+Teach Skill Claude is a Windows desktop tool that records user workflow telemetry and compiles it into Claude Code skills (SKILL.md). Two target audiences:
 
 1. **Everyday Claude Code users** who want to create skills by demonstration — do the task once, get a reusable skill.
 2. **Advanced AI consultants** who go into organizations, observe workflows, auto-generate skills, and leave behind automation.
@@ -35,7 +35,7 @@ The compiler can run independently on any existing JSONL file, enabling consulta
 | Signal | Detail |
 |--------|--------|
 | Active window | Process name (e.g., `chrome.exe`) + window title |
-| Mouse clicks | Count per window session (no coordinates) |
+| Mouse clicks | Structured click events with coordinates, button, active window, and screenshot frame reference |
 | Keystrokes | Frequency count per window session (no raw keys logged) |
 | Screenshots | PNG on window switch + on click if 5s+ since last capture. Native resolution. |
 | Clipboard | Text-only clipboard changes, routed through privacy filter |
@@ -55,12 +55,13 @@ The compiler can run independently on any existing JSONL file, enabling consulta
 
 ### JSONL Event Schema
 
-Five event types per recording:
+Six event types per recording:
 
 ```jsonl
 {"ts": "2026-05-24T10:30:00.000Z", "type": "recording_meta", "machine": "DESKTOP-ABC", "os": "Windows 11", "version": "0.1.0"}
 {"ts": "2026-05-24T10:30:01.123Z", "type": "window_switch", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/001.png"}
-{"ts": "2026-05-24T10:30:15.789Z", "type": "in_app_capture", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/002.png", "trigger": "click_after_5s"}
+{"ts": "2026-05-24T10:30:15.789Z", "type": "in_app_capture", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "screenshot": "frames/002.png", "frame_id": "002", "trigger": "click_after_5s"}
+{"ts": "2026-05-24T10:30:16.100Z", "type": "click", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "x": 420, "y": 315, "button": "Button.left", "screenshot_frame_id": "002", "screenshot_frame_path": "frames/002.png"}
 {"ts": "2026-05-24T10:30:20.456Z", "type": "clipboard_text", "content": "=SUM(B2:B15)", "source_process": "chrome.exe"}
 {"ts": "2026-05-24T10:30:45.456Z", "type": "session_end", "process": "chrome.exe", "title": "Google Sheets - Q2 Report", "duration_s": 44.3, "click_count": 12, "keystroke_count": 87}
 ```
@@ -68,6 +69,7 @@ Five event types per recording:
 - **`recording_meta`** — first line. Start time, machine name, OS version.
 - **`window_switch`** — emitted when foreground app changes. Includes screenshot path.
 - **`in_app_capture`** — screenshot taken within the same window, triggered by a click 5+ seconds after the last capture. Covers single-app workflows.
+- **`click`** — structured mouse click event. Coordinates and button are omitted on sensitive windows.
 - **`clipboard_text`** — text-only clipboard change. Routed through privacy filter. Captures high-signal context (copied errors, config values, URLs).
 - **`session_end`** — emitted for the previous window when user switches away. Aggregated click/keystroke counts and duration.
 
@@ -192,7 +194,7 @@ Each session creates a timestamped subfolder:
 ## Project Structure
 
 ```
-teach-skill/
+teach-skill-claude/
 ├── .claude/
 │   └── settings.json
 ├── docs/
@@ -228,7 +230,7 @@ teach-skill/
 │       └── sample_recording.jsonl
 ├── requirements.txt
 ├── setup.py
-├── CLAUDE.md
+├── CONTRIBUTING.md
 └── README.md
 ```
 
@@ -244,7 +246,7 @@ teach-skill/
 | `claude-agent-sdk` | Skill compilation — invokes Claude programmatically via Agent SDK |
 | `pytest` | Testing |
 
-No separate API key required — Agent SDK authenticates via existing Claude Code subscription.
+No separate API key required. Agent SDK authenticates via the existing Claude Code subscription.
 
 ## Testing Strategy
 
@@ -259,13 +261,13 @@ No separate API key required — Agent SDK authenticates via existing Claude Cod
 | Screenshot grabber | Manual on Windows |
 | End-to-end | Manual — record workflow, compile, validate SKILL.md |
 
-`tests/fixtures/sample_recording.jsonl` enables testing the compile pipeline on any platform without Windows.
+`tests/fixtures/sample_recording.jsonl` enables testing the compile pipeline without recording a desktop workflow.
 
 ## Installation (POC)
 
-```bash
-git clone https://github.com/maxswritessomecode/teach-skill.git
-cd teach-skill
+```powershell
+git clone https://github.com/maxswritessomecode/teach-skill-claude.git
+cd teach-skill-claude
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .

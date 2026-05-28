@@ -1,96 +1,128 @@
-# Teach Skill — Cross-Platform Telemetry Recorder & Claude Code Compiler
+# Teach Skill Claude
 
-Do a task once on Windows, compile it into an automation blueprint on Mac, and teach Claude Code new skills forever!
+Teach Skill Claude is a Windows tool that records a desktop workflow and turns it into a reusable Claude Code skill.
 
-**Teach Skill** is an open-source toolchain that watches what you do on your Windows desktop — which apps you use, how you navigate, and what you type — and automatically compiles that workflow into a reusable [Claude Code Skill](https://docs.anthropic.com/en/docs/claude-code/skills) (`SKILL.md`). 
+Use it when you want to teach Claude Code how to repeat a process you normally do by hand: opening apps, moving through screens, copying text, saving files, or using internal tools.
 
-It is designed with a **split-host cross-platform architecture**:
-- **Windows Client**: Captures telemetry, screenshots, and window switches via a lightweight tray application.
-- **macOS/Linux Compile Host**: Processes the telemetry timeline through the **Claude Agent SDK** to generate structured skills, requiring zero credentials or LLM setups on the recording client.
+## Who This Is For
 
----
+This project is for Windows users who are comfortable following PowerShell instructions but do not want to write Python code.
 
-## Key Features
+You will:
 
-- 🖥️ **Split-Host Syncing**: Record workflows on a personal laptop; compile them instantly on your high-powered developer machine (e.g. via Dropbox sync).
-- 🔑 **Secure Keylogger Mode**: Toggleable character capture that securely reconstructs your typing in real-time, including space/newline processing and intelligent backspace correction.
-- 🛡️ **Privacy Shield**: Automated redactors that strip passwords, multi-factor authentication (MFA/Okta) screens, and sensitive titles before they hit the compiler.
-- ⚡ **Desktop Shortcuts**: One-click tester installer (`install.ps1`) that automatically deploys a ready-to-run `.bat` launcher on your Windows Desktop.
-- 🤖 **Agent SDK Compilation**: Seamless integration with the Claude Agent SDK async generator with dynamic turn handling (`max_turns: 15`).
+1. Install the recorder.
+2. Start recording.
+3. Do the task once.
+4. Stop recording from the Windows tray icon.
+5. Compile the recording into a `SKILL.md` file for Claude Code.
 
----
+## Requirements
 
-## Quick Start (macOS / Compiler Host)
+- Windows 10 or Windows 11
+- Python 3.10 or newer
+- Claude Code installed and signed in
+- PowerShell
 
-To compile recorded telemetry into skills:
+When installing Python, check the box that says **Add Python.exe to PATH**.
 
-```bash
-# Clone the repository
-git clone <your-repo-url>
-cd teach-skill
+## Install
 
-# Set up environment
-python3 -m venv .venv
-source .venv/bin/activate
+Open PowerShell in the project folder and run:
 
-# Install compiler dependencies
-pip install -e .
+```powershell
+.\install.ps1
 ```
 
-To compile a `.jsonl` telemetry file into a skill:
-```bash
-teach-skill compile path/to/recording.jsonl --yes --local
+The installer creates:
+
+- A local Python environment in `.venv`
+- A default config file at `$env:USERPROFILE\.teach-skill\config.json`
+- A desktop launcher named `Start Teach Skill Claude.bat`
+
+## Record A Workflow
+
+1. Double-click `Start Teach Skill Claude.bat` on your Desktop.
+2. Do the task you want Claude Code to learn.
+3. Right-click the red Teach Skill Claude tray icon.
+4. Choose **Stop Recording**.
+
+Recordings are saved here:
+
+```text
+$env:USERPROFILE\.teach-skill\recordings
 ```
 
----
+Each recording folder contains:
 
-## Tester Setup (Windows / Recorder Client)
+- `recording.jsonl` - the event timeline
+- `frames\` - screenshots captured during the workflow
 
-We make testing incredibly easy. If you are distributing this to other testers:
+## Compile A Skill
 
-1. Package the folder (excluding `.venv` and `.git` caches).
-2. The tester simply unzips it and runs **`install.ps1`** (Right-click -> **Run with PowerShell**).
-3. This creates a **`Start Teach Skill`** shortcut directly on their Windows Desktop!
-4. They double-click to record, and right-click the red circle tray icon to stop.
+Open PowerShell in the project folder and run:
 
----
-
-## How It Works
-
-```mermaid
-flowchart LR
-    subgraph Windows ["Windows Client"]
-        A[teach-skill record] -->|Capture input & active windows| B[(Telemetry Log & Frames)]
-    end
-
-    subgraph Sync ["Shared Sync Folder"]
-        B -->|Background Sync| C[(Shared Folder)]
-    end
-
-    subgraph Mac ["Mac Studio Compile Host"]
-        C -->|Read Telemetry| D[teach-skill compile]
-        D -->|Agent SDK / LLM Queries| E[Claude Code CLI]
-    end
+```powershell
+.\.venv\Scripts\Activate.ps1
+teach-skill compile "$env:USERPROFILE\.teach-skill\recordings\<recording-folder>\recording.jsonl"
 ```
 
-1. **Record**: The tray app logs window switches, click/keystroke counts, and clipboard text as you perform a task.
-2. **Compile**: The compiler reads the timeline, reconstructs your exact flow, and queries Claude to write the `SKILL.md` blueprint.
-3. **Save**: Save skills locally to your project's `.claude/skills/` folder or globally for all developer workspaces on your machine.
+Replace `<recording-folder>` with the folder created by your recording.
 
----
+The compiler shows the generated skill before saving it. Read it carefully. If it looks wrong, reject it and record the task again with slower, clearer steps.
 
-## Development & Test Suite
+To save without prompts:
 
-The project comes with a comprehensive, robust test suite covering parsers, clipboard monitors, privacy redaction, and CLI workflows:
-
-```bash
-# Run unit tests
-pytest tests/ -v
+```powershell
+teach-skill compile "$env:USERPROFILE\.teach-skill\recordings\<recording-folder>\recording.jsonl" --yes --name my-workflow
 ```
 
----
+## Privacy Notes
+
+Teach Skill Claude records workflow metadata and screenshots. Treat recording folders as sensitive data.
+
+By default, the recorder:
+
+- Redacts common login, password, SSO, MFA, and banking screens
+- Suppresses screenshots for sensitive windows
+- Does not store raw typed characters
+
+For workplace use, get approval before recording internal systems or client data.
+
+## Common Problems
+
+### PowerShell Says Scripts Are Disabled
+
+Run this once in PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Then run the installer again.
+
+### Python Is Not Found
+
+Install Python from:
+
+```text
+https://www.python.org/downloads/
+```
+
+During installation, check **Add Python.exe to PATH**.
+
+### Claude Code Is Not Found
+
+Install and sign in to Claude Code, then open a new PowerShell window and try again.
+
+## Developer Checks
+
+For contributors:
+
+```powershell
+.\scripts\setup-windows.ps1
+pytest tests -q
+```
 
 ## License
 
 MIT
-
