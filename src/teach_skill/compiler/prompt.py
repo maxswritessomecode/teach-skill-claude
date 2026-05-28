@@ -45,6 +45,14 @@ description: <one-line description of what this skill does>
 <Common failure modes and how Claude Code should recover or hand off to the user.>
 ```
 
+Optionally append this section only when the gates below are met:
+
+```markdown
+## After Running
+
+<Briefly offer to create a reusable script, API/MCP integration, parser, or command-line workflow and rewrite this skill to use it.>
+```
+
 ## Rules
 
 - Name the skill based on the observed task, not the apps used
@@ -61,6 +69,12 @@ description: <one-line description of what this skill does>
 - Use screenshot labels like "Screen 0002" when citing visual evidence
 - If clipboard content was captured, incorporate it as context for understanding the workflow
 - Separate observed facts from inferred intent when the recording does not prove why an action happened
+- Include an "After Running" section only when useful: after successfully running a slow UI-based skill, offer to create a reusable script, API/MCP integration, parser, or command-line workflow if it appears feasible and would provide a large speedup
+- Treat the speedup as evidence-based: include this section only when the recording shows repeated manual UI work, long waits, or a stable input/output pattern plus an observable or strongly implied deterministic path such as export, API, CLI, or structured data parsing
+- Omit the "After Running" section if no clear speedup exists
+- Only make this offer when the faster path can produce the same artifact or result with less manual UI work
+- Do not make this offer if the artifact-producing path already uses a script, command, API, or other fast deterministic path
+- Keep the offer brief and ask before creating or modifying scripts
 - Do not narrate the telemetry — transform it into instructions
 - Keep the skill concise — a skilled developer should be able to follow it without ambiguity"""
 

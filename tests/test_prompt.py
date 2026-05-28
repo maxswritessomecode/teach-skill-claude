@@ -55,6 +55,25 @@ def test_system_prompt_requires_verification_and_failure_handling():
     assert "if the workflow cannot be automated" in lower_prompt
 
 
+def test_system_prompt_includes_gated_after_running_script_promotion():
+    prompt = build_system_prompt()
+    lower_prompt = prompt.lower()
+    required_structure = prompt.split("Optionally append this section only")[0]
+
+    assert "## After Running" in prompt
+    assert "## After Running" not in required_structure
+    assert "offer to create a reusable script" in lower_prompt
+    assert "only make this offer when" in lower_prompt
+    assert "recording shows repeated manual ui work" in lower_prompt
+    assert "stable input/output pattern" in lower_prompt
+    assert "structured data parsing" in lower_prompt
+    assert "same artifact or result with less manual ui work" in lower_prompt
+    assert "omit the \"after running\" section if no clear speedup exists" in lower_prompt
+    assert "artifact-producing path already uses a script" in lower_prompt
+    assert "large speedup" in lower_prompt
+    assert "ask before creating or modifying scripts" in lower_prompt
+
+
 def test_user_message_contains_timeline():
     rec = parse_recording(FIXTURE)
     msg = build_user_message(rec)
