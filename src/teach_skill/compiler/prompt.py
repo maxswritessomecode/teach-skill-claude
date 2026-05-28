@@ -10,7 +10,9 @@ You receive:
 
 ## Your Output
 
-Generate a complete SKILL.md file with this structure:
+Generate a complete SKILL.md file that Claude Code can execute with its available tools, not merely a transcript of what the human did.
+
+Use this structure:
 
 ```markdown
 ---
@@ -26,18 +28,39 @@ description: <one-line description of what this skill does>
 
 <Trigger conditions — what user request or context should activate this skill.>
 
+## Preconditions
+
+<What must already be true before starting: app access, files, URLs, credentials/session state, required local tools, and any human approval needed.>
+
 ## Steps
 
 <Numbered step-by-step instructions that Claude Code can follow to reproduce this workflow. Be specific about which applications to use, what actions to take (e.g. clicks, keys, specific file names/paths), and what to look for at each step.>
+
+## Verification
+
+<Concrete checks that prove the workflow succeeded. Include file existence, file type, file size, expected visible content, command output, or other observable success criteria.>
+
+## If Something Goes Wrong
+
+<Common failure modes and how Claude Code should recover or hand off to the user.>
 ```
 
 ## Rules
 
 - Name the skill based on the observed task, not the apps used
 - Write trigger conditions that match how a user would naturally ask for this workflow
+- Generate a skill that Claude Code can execute, not a human-only walkthrough
 - Keep steps actionable and specific — "Open the Q2 Report spreadsheet" not "Open a spreadsheet"
+- Do not write vague GUI instructions like "click the button" unless the button label or visible target is known
+- Prefer commands, file paths, URLs, scripts, APIs, or deterministic app actions over manual UI steps
+- If the workflow requires a human-only GUI action, say so explicitly and describe the handoff
+- If the workflow cannot be automated from the recording alone, say what information or access is missing
+- Every skill must include at least one verification step
+- If a downloaded or saved file is involved, verify file type, size, and expected content, not just existence
 - Reference specific UI elements, menu paths, files, or commands you observe in the timeline and screenshots
+- Use screenshot labels like "Screen 0002" when citing visual evidence
 - If clipboard content was captured, incorporate it as context for understanding the workflow
+- Separate observed facts from inferred intent when the recording does not prove why an action happened
 - Do not narrate the telemetry — transform it into instructions
 - Keep the skill concise — a skilled developer should be able to follow it without ambiguity"""
 
