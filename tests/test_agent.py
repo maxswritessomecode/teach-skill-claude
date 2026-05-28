@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
-from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk
+from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk, save_skill
 
 
 FIXTURE = Path("tests/fixtures/sample_recording.jsonl")
@@ -257,3 +257,35 @@ def test_compile_sends_prompt_stream_to_agent_sdk():
     assert not isinstance(captured["prompt"], str)
     messages = asyncio.run(collect_async(captured["prompt"]))
     assert any(block["type"] == "image" for block in messages[0]["message"]["content"])
+
+
+def test_save_skill_writes_utf8_markdown_on_windows_default_encoding(
+    tmp_path,
+    monkeypatch,
+):
+    original_write_text = Path.write_text
+
+    def write_text_with_windows_default_encoding(
+        self,
+        data,
+        encoding=None,
+        errors=None,
+        newline=None,
+    ):
+        if encoding is None:
+            data.encode("cp1252")
+        return original_write_text(
+            self,
+            data,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "write_text", write_text_with_windows_default_encoding)
+
+    skill_text = "# Download Rates\n\nOpen the report → verify the saved file.\n"
+    skill_path = save_skill(skill_text, "downloadrates", global_save=False)
+
+    assert skill_path.read_text(encoding="utf-8") == skill_text

@@ -181,5 +181,5 @@ def save_skill(skill_text: str, task_name: str, global_save: bool = True) -> Pat
 
     base.mkdir(parents=True, exist_ok=True)
     skill_path = base / "SKILL.md"
-    skill_path.write_text(skill_text)
+    skill_path.write_text(skill_text, encoding="utf-8")
     return skill_path
