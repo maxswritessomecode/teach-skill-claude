@@ -20,7 +20,7 @@ try {
     if ($pyVersion -match "Python (\d+)\.(\d+)") {
         $major = [int]$Matches[1]
         $minor = [int]$Matches[2]
-        if ($major -ge 3 -and $minor -ge 10) {
+        if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 10)) {
             Write-Host "  Found: $pyVersion" -ForegroundColor Green
         } else {
             Write-Host "  Error: Python 3.10 or higher is required. Found $pyVersion" -ForegroundColor Red
@@ -122,7 +122,7 @@ if (Test-Path $configFile) {
 Write-Host ""
 Write-Host "Creating a double-clickable launcher on your Desktop..." -ForegroundColor Yellow
 
-$desktopPath = [System.IO.Path]::Combine($env:USERPROFILE, "Desktop")
+$desktopPath = [Environment]::GetFolderPath("Desktop")
 $launcherFile = Join-Path $currentDir "Start-Recorder.bat"
 $desktopLauncher = Join-Path $desktopPath "Start Teach Skill Claude.bat"
 
@@ -130,11 +130,10 @@ $launcherContent = @"
 @echo off
 cd /d "%~dp0"
 echo =========================================
-echo       Starting Teach Skill Claude Recorder
+echo       Starting Teach Skill Claude
 echo =========================================
-echo Use the System Tray icon to stop recording.
 echo.
-.venv\Scripts\python.exe -m teach_skill.cli record
+.venv\Scripts\python.exe -m teach_skill.cli launch
 "@
 
 # Write launcher to project folder
@@ -144,7 +143,7 @@ Set-Content -Path $launcherFile -Value $launcherContent -Force
 $desktopLauncherContent = @"
 @echo off
 cd /d "$currentDir"
-.venv\Scripts\python.exe -m teach_skill.cli record
+.venv\Scripts\python.exe -m teach_skill.cli launch
 "@
 Set-Content -Path $desktopLauncher -Value $desktopLauncherContent -Force
 
@@ -162,6 +161,8 @@ Write-Host "  When done, right-click the red circle tray icon and choose 'Stop R
 Write-Host ""
 Write-Host "Your recordings are saved inside: " -ForegroundColor White
 Write-Host "  $configDir" -ForegroundColor Yellow
+Write-Host "Logs are saved inside: " -ForegroundColor White
+Write-Host "  $configDir\logs" -ForegroundColor Yellow
 Write-Host "Use the README compile command to turn a recording into a skill." -ForegroundColor White
 Write-Host ""
 

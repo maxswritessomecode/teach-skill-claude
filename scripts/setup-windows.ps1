@@ -1,5 +1,4 @@
 # Teach Skill Claude - Windows Development Environment Setup
-# Run in PowerShell as Administrator (right-click > Run as Administrator)
 # Usage: .\scripts\setup-windows.ps1
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +13,7 @@ try {
     if ($pyVersion -match "Python (\d+)\.(\d+)") {
         $major = [int]$Matches[1]
         $minor = [int]$Matches[2]
-        if ($major -ge 3 -and $minor -ge 10) {
+        if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 10)) {
             Write-Host "  OK: $pyVersion" -ForegroundColor Green
         } else {
             Write-Host "  FAIL: Python 3.10+ required, found $pyVersion" -ForegroundColor Red
@@ -35,16 +34,8 @@ try {
     $uvVersion = uv --version 2>&1
     Write-Host "  OK: $uvVersion" -ForegroundColor Green
 } catch {
-    Write-Host "  WARN: uv not found. Attempting to install..." -ForegroundColor Yellow
-    try {
-        # Download and install uv via powershell
-        powershell -Command "irm https://astral.sh/uv/install.ps1 | iex"
-        $env:Path += ";$env:USERPROFILE\.local\bin"
-        $uvVersion = uv --version 2>&1
-        Write-Host "  OK: Installed $uvVersion" -ForegroundColor Green
-    } catch {
-        Write-Host "  WARN: Failed to install uv automatically. Falling back to standard Python pip." -ForegroundColor Yellow
-    }
+    Write-Host "  WARN: uv not found. Falling back to standard Python pip." -ForegroundColor Yellow
+    Write-Host "  Optional: install uv from https://docs.astral.sh/uv/getting-started/installation/" -ForegroundColor Yellow
 }
 
 # --- 3. Check Git ---

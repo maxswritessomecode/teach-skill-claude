@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 from click.testing import CliRunner
 from teach_skill.cli import main
+from teach_skill.recorder.lock import RecorderLock
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_recording.jsonl"
@@ -64,3 +65,21 @@ def test_compile_full_flow_with_mock_sdk(tmp_path, monkeypatch):
             / "update-q2-report"
             / "SKILL.md"
         ).exists()
+
+
+def test_compile_blocks_recording_under_active_recordings_root(tmp_path):
+    recording_dir = tmp_path / "recording_20260531_120000"
+    recording_dir.mkdir()
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text('{"type": "recording_meta"}\n', encoding="utf-8")
+
+    runner = CliRunner()
+    with (
+        RecorderLock(tmp_path),
+        patch("teach_skill.cli.load_config", return_value={"storage_path": str(tmp_path)}),
+        patch("teach_skill.cli.check_agent_sdk", return_value=True),
+    ):
+        result = runner.invoke(main, ["compile", str(recording_path)])
+
+    assert result.exit_code == 1
+    assert "Stop the active recording before compiling a skill" in result.output

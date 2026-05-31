@@ -8,14 +8,19 @@ import click
 from teach_skill import __version__
 from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk, save_skill
 from teach_skill.config import load_config
+from teach_skill.diagnostics import create_support_bundle
+from teach_skill.doctor import format_doctor_result, run_doctor
+from teach_skill.runtime_log import configure_logging, get_logger, log_path
 
 
 
 @click.group()
 @click.version_option(version=__version__)
-def main():
+@click.pass_context
+def main(ctx):
     """Teach Skill Claude - record workflows, compile Claude Code skills."""
-    pass
+    command = ctx.invoked_subcommand or "root"
+    configure_logging(command)
 
 
 @main.command()
@@ -25,10 +30,26 @@ def main():
 @click.option("--global/--local", "save_global", default=True, help="Save globally (default) or locally to current project.")
 def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
     """Compile a JSONL recording into a Claude Code skill."""
+    logger = get_logger("cli")
+    logger.info("compile requested path=%s", jsonl_path)
     if not check_agent_sdk():
+        logger.error("compile failed missing_agent_sdk")
         click.echo("Error: claude-agent-sdk not installed.", err=True)
         click.echo("Run: pip install claude-agent-sdk", err=True)
         sys.exit(1)
+
+    config = load_config()
+    recordings_root = Path(config.get("storage_path", str(Path.home() / ".teach-skill" / "recordings"))).resolve()
+    try:
+        jsonl_path.resolve().relative_to(recordings_root)
+        from teach_skill.recorder.lock import is_recording_active
+
+        if is_recording_active(recordings_root):
+            logger.warning("compile blocked active_recording path=%s", jsonl_path)
+            click.echo("Error: Stop the active recording before compiling a skill.", err=True)
+            sys.exit(1)
+    except ValueError:
+        pass
 
     compiler = SkillCompiler(jsonl_path)
 
@@ -76,7 +97,52 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
 
     skill_path = save_skill(skill_text, task_name, global_save=save_global)
 
+    logger.info("skill saved path=%s", skill_path)
     click.echo(f"Skill saved to: {skill_path}")
+
+
+@main.command()
+@click.option("--check-only", is_flag=True, help="Run setup checks without opening the launcher window.")
+def launch(check_only: bool):
+    """Open the guided Teach Skill Claude launcher."""
+    logger = get_logger("cli")
+    result = run_doctor()
+    logger.info("launch requested check_only=%s status=%s", check_only, result.status)
+    for line in format_doctor_result(result):
+        click.echo(line)
+
+    if check_only:
+        return
+
+    from teach_skill.launcher import launch_app
+
+    launch_app()
+
+
+@main.command()
+def doctor():
+    """Check whether Teach Skill Claude is ready to record and compile."""
+    result = run_doctor()
+    get_logger("cli").info("doctor status=%s", result.status)
+    for line in format_doctor_result(result):
+        click.echo(line)
+
+
+@main.command()
+def logs():
+    """Show the Teach Skill Claude log file path."""
+    path = log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    get_logger("cli").info("logs path requested path=%s", path)
+    click.echo(f"Log file: {path}")
+
+
+@main.command("support-bundle")
+def support_bundle():
+    """Create a support bundle with diagnostics and logs."""
+    bundle_path = create_support_bundle()
+    get_logger("cli").info("support bundle created path=%s", bundle_path)
+    click.echo(f"Support bundle saved to: {bundle_path}")
 
 
 
@@ -85,51 +151,65 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
 @click.option("--auto-compile", is_flag=True, help="Automatically compile the recording into a skill when stopped.")
 def record(test_mode: bool, auto_compile: bool):
     """Start the Teach Skill Claude recorder (Windows only)."""
+    logger = get_logger("cli")
     if sys.platform != "win32" and not test_mode:
+        logger.error("record blocked unsupported_platform platform=%s", sys.platform)
         click.echo("Error: Recording is only supported on Windows.", err=True)
         click.echo("Run this command on a Windows 10 or Windows 11 computer.", err=True)
         sys.exit(1)
 
     config = load_config()
     recordings_root = Path(config.get("storage_path", str(Path.home() / ".teach-skill" / "recordings")))
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_dir = recordings_root / f"recording_{timestamp}"
-    session_dir.mkdir(parents=True, exist_ok=True)
+    from teach_skill.recorder.lock import RecorderLock, RecordingAlreadyRunning
 
-    click.echo("Starting recorder session...")
-    click.echo("Telemetry log and frames will be saved to:")
-    click.echo(f"  {session_dir}")
-    click.echo()
-    click.echo("System Tray Icon created. Use the menu option to stop recording.")
-    click.echo("Please grant Windows permissions if requested.")
+    try:
+        with RecorderLock(recordings_root):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            session_dir = recordings_root / f"recording_{timestamp}"
+            session_dir.mkdir(parents=True, exist_ok=False)
+            logger.info("recording started session_dir=%s", session_dir)
 
-    from teach_skill.recorder.writer import EventWriter
-    from teach_skill.recorder.controller import RecorderController
-    from teach_skill.recorder.tray import RecorderTrayApp
+            click.echo("Starting recorder session...")
+            click.echo("Telemetry log and frames will be saved to:")
+            click.echo(f"  {session_dir}")
+            click.echo()
+            click.echo("System Tray Icon created. Use the menu option to stop recording.")
+            click.echo("Please grant Windows permissions if requested.")
 
-    writer = EventWriter(session_dir)
-    controller = RecorderController(writer, config)
-    app = RecorderTrayApp(controller)
-    app.start()
+            from teach_skill.recorder.writer import EventWriter
+            from teach_skill.recorder.controller import RecorderController
+            from teach_skill.recorder.tray import RecorderTrayApp
 
-    if auto_compile:
-        jsonl_path = session_dir / "recording.jsonl"
-        click.echo("\n[+] Recording stopped. Auto-compiling skill...")
-        if not check_agent_sdk():
-            click.echo("Error: claude-agent-sdk is not installed on this machine.", err=True)
-            click.echo("Please install it to use --auto-compile: pip install claude-agent-sdk", err=True)
-            sys.exit(1)
+            writer = EventWriter(session_dir)
+            controller = RecorderController(writer, config)
+            app = RecorderTrayApp(controller)
+            app.start()
 
-        compiler = SkillCompiler(jsonl_path)
-        
-        click.echo("Compiling skill via Agent SDK...")
-        try:
-            skill_text = asyncio.run(compiler.compile())
-            task_name = session_dir.name.replace("recording_", "skill-").replace("_", "-")
-            skill_path = save_skill(skill_text, task_name, global_save=True)
-            click.echo(f"[✓] Skill compiled and saved globally to: {skill_path}")
-        except Exception as e:
-            click.echo(f"Error compiling skill: {e}", err=True)
+            if auto_compile:
+                jsonl_path = session_dir / "recording.jsonl"
+                click.echo("\n[+] Recording stopped. Auto-compiling skill...")
+                if not check_agent_sdk():
+                    click.echo("Error: claude-agent-sdk is not installed on this machine.", err=True)
+                    click.echo("Please install it to use --auto-compile: pip install claude-agent-sdk", err=True)
+                    sys.exit(1)
+
+                compiler = SkillCompiler(jsonl_path)
+
+                click.echo("Compiling skill via Agent SDK...")
+                try:
+                    skill_text = asyncio.run(compiler.compile())
+                    task_name = session_dir.name.replace("recording_", "skill-").replace("_", "-")
+                    skill_path = save_skill(skill_text, task_name, global_save=True)
+                    logger.info("auto compile saved path=%s", skill_path)
+                    click.echo(f"[✓] Skill compiled and saved globally to: {skill_path}")
+                except Exception as e:
+                    logger.exception("auto compile failed")
+                    click.echo(f"Error compiling skill: {e}", err=True)
+    except RecordingAlreadyRunning:
+        logger.warning("record blocked active_recording")
+        click.echo("Error: Another recording appears to be running.", err=True)
+        click.echo("Stop the active recording before starting a new one.", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
