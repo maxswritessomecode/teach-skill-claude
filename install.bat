@@ -11,30 +11,35 @@ echo It does not run script files or change execution policy.
 echo.
 
 echo [1/5] Checking Python installation...
-python --version >nul 2>&1
+set "PYTHON_CMD=python"
+%PYTHON_CMD% --version >nul 2>&1
 if errorlevel 1 (
-    echo   Error: Python was not found.
-    echo   Install Python 3.10 or newer from https://www.python.org/downloads/
-    echo   During installation, check "Add Python.exe to PATH".
-    pause
-    exit /b 1
+    py -3 --version >nul 2>&1
+    if errorlevel 1 (
+        echo   Error: Python was not found.
+        echo   Install Python 3.10 or newer from https://www.python.org/downloads/
+        echo   During installation, check "Add Python.exe to PATH".
+        pause
+        exit /b 1
+    )
+    set "PYTHON_CMD=py -3"
 )
 
-python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+%PYTHON_CMD% -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
 if errorlevel 1 (
-    python --version
+    %PYTHON_CMD% --version
     echo   Error: Python 3.10 or newer is required.
     pause
     exit /b 1
 )
-python --version
+%PYTHON_CMD% --version
 
 echo.
 echo [2/5] Creating virtual environment...
 if exist ".venv\Scripts\python.exe" (
     echo   Virtual environment already exists.
 ) else (
-    python -m venv .venv
+    %PYTHON_CMD% -m venv .venv
     if errorlevel 1 (
         echo   Error: Failed to create virtual environment.
         pause

@@ -27,7 +27,10 @@ def test_install_bat_does_not_depend_on_powershell_execution_policy():
     assert "ExecutionPolicy" not in text
     assert "Invoke-Expression" not in text
     assert " -File " not in text
-    assert "python -m venv .venv" in text
+    assert 'set "PYTHON_CMD=python"' in text
+    assert "py -3 --version" in text
+    assert 'set "PYTHON_CMD=py -3"' in text
+    assert "%PYTHON_CMD% -m venv .venv" in text
     assert "-m pip install -e \".[recorder]\"" in text
     assert "-m teach_skill.cli launch" in text
 
