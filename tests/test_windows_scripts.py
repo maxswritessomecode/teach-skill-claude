@@ -25,7 +25,8 @@ def test_install_bat_runs_installer_with_process_execution_policy_bypass():
 
     assert '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"' in text
     assert "-ExecutionPolicy Bypass" in text
-    assert "-File \"%~dp0install.ps1\"" in text
+    assert "Unblock-File -LiteralPath" in text
+    assert "& '%~dp0install.ps1'" in text
 
 
 def test_setup_windows_does_not_pipe_remote_installers_to_shell_or_require_admin():
