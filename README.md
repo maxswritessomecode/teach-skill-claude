@@ -21,7 +21,7 @@ You will:
 - Windows 10 or Windows 11
 - Python 3.10 or newer
 - Claude Code installed and signed in
-- PowerShell, used internally by the installer
+- PowerShell, only needed for optional command-line use
 
 When installing Python, check the box that says **Add Python.exe to PATH**.
 
@@ -134,7 +134,7 @@ For workplace use, get approval before recording internal systems or client data
 
 ### PowerShell Says Scripts Are Disabled
 
-Use `install.bat` instead of running `install.ps1` directly. The batch installer uses a process-scoped policy for this one install run and does not change your user PowerShell settings.
+Use `install.bat` instead of running `install.ps1` directly. The batch installer uses `cmd.exe` and Python directly, so it does not change your user PowerShell settings.
 
 ```text
 install.bat

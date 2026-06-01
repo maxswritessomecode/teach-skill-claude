@@ -20,13 +20,16 @@ def test_install_scripts_accept_future_python_majors():
     assert expected in setup_text
 
 
-def test_install_bat_runs_installer_with_process_execution_policy_bypass():
+def test_install_bat_does_not_depend_on_powershell_execution_policy():
     text = (ROOT / "install.bat").read_text()
 
-    assert '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"' in text
-    assert "-ExecutionPolicy Bypass" in text
-    assert "Unblock-File -LiteralPath" in text
-    assert "& '%~dp0install.ps1'" in text
+    assert "powershell" not in text.lower()
+    assert "ExecutionPolicy" not in text
+    assert "Invoke-Expression" not in text
+    assert " -File " not in text
+    assert "python -m venv .venv" in text
+    assert "-m pip install -e \".[recorder]\"" in text
+    assert "-m teach_skill.cli launch" in text
 
 
 def test_setup_windows_does_not_pipe_remote_installers_to_shell_or_require_admin():
