@@ -7,7 +7,7 @@ hiddenimports = collect_submodules("claude_agent_sdk")
 
 a = Analysis(
     ["src/teach_skill/cli.py"],
-    pathex=["."],
+    pathex=["src"],
     binaries=[],
     datas=[],
     hiddenimports=hiddenimports,

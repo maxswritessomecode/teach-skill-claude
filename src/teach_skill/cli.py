@@ -103,15 +103,22 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
 
 @main.command()
 @click.option("--check-only", is_flag=True, help="Run setup checks without opening the launcher window.")
-def launch(check_only: bool):
+@click.option("--qt", "use_qt", is_flag=True, help="Open the PySide6 Record And Review shell.")
+def launch(check_only: bool, use_qt: bool):
     """Open the guided Teach Skill Claude launcher."""
     logger = get_logger("cli")
     result = run_doctor()
-    logger.info("launch requested check_only=%s status=%s", check_only, result.status)
+    logger.info("launch requested check_only=%s qt=%s status=%s", check_only, use_qt, result.status)
     for line in format_doctor_result(result):
         click.echo(line)
 
     if check_only:
+        return
+
+    if use_qt:
+        from teach_skill.qt_app.app import launch_qt_app
+
+        launch_qt_app()
         return
 
     from teach_skill.launcher import launch_app

@@ -47,8 +47,16 @@ if (-not $iscc) {
 }
 Write-Host "Inno Setup: $($iscc.Source)"
 
-if (Test-Path $distDir) {
-    Remove-Item $distDir -Recurse -Force
+$knownOutputs = @(
+    "$projectDir\dist\TeachSkillClaude",
+    "$projectDir\dist\installer\TeachSkillClaudeSetup.exe",
+    "$projectDir\build\TeachSkillClaude"
+)
+
+foreach ($output in $knownOutputs) {
+    if (Test-Path $output) {
+        Remove-Item $output -Recurse -Force
+    }
 }
 
 python -m PyInstaller $specFile --noconfirm

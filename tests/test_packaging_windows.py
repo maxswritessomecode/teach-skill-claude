@@ -37,3 +37,19 @@ def test_pyinstaller_spec_keeps_console_for_compile_prompts():
     text = (ROOT / "packaging" / "windows" / "TeachSkillClaude.spec").read_text()
 
     assert "console=True" in text
+
+
+def test_pyinstaller_spec_uses_src_import_path():
+    text = (ROOT / "packaging" / "windows" / "TeachSkillClaude.spec").read_text()
+
+    assert 'pathex=["src"]' in text
+
+
+def test_full_installer_build_script_deletes_only_known_outputs():
+    text = (ROOT / "packaging" / "windows" / "build-full-installer.ps1").read_text()
+
+    assert "Remove-Item $distDir" not in text
+    assert 'Remove-Item "$projectDir\\dist"' not in text
+    assert "Remove-Item '$projectDir\\dist'" not in text
+    assert "TeachSkillClaude" in text
+    assert "TeachSkillClaudeSetup.exe" in text

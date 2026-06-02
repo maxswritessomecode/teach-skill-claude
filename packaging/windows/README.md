@@ -28,6 +28,24 @@ The build expects:
 - Inno Setup with `ISCC.exe` available
 - Claude Code installed separately on the user's machine for skill compilation
 
+## Modern Qt Shell Spike
+
+During the PySide6 spike, run the modern shell from a Git checkout with:
+
+```powershell
+.\install.bat
+.\.venv\Scripts\teach-skill.exe launch --qt
+```
+
+The classic launcher remains available with:
+
+```powershell
+.\.venv\Scripts\teach-skill.exe launch
+```
+
+The full installer should not be treated as release-ready until the PySide6
+bundle has been smoke-tested on Windows 10 and Windows 11.
+
 ## Advanced Installer
 
 The advanced path is `install.bat` from the repository root. It uses the user's

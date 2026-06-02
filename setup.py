@@ -18,6 +18,9 @@ setup(
             "pystray",
             "psutil",
         ],
+        "ui": [
+            "PySide6",
+        ],
         "dev": [
             "pytest",
         ],
