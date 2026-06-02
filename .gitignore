@@ -10,5 +10,5 @@ build/
 recordings/
 .claude/
 .superpowers/
+.worktrees/
 *.zip
-
