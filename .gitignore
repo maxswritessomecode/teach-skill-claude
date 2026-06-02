@@ -9,6 +9,6 @@ build/
 .pytest_cache/
 recordings/
 .claude/
+.superpowers/
 *.zip
-
 
