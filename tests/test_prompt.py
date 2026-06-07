@@ -70,6 +70,16 @@ def test_system_prompt_preserves_office_style_formatting_details():
     assert "do not guess" in lower_prompt
 
 
+def test_system_prompt_rejects_meta_compile_transcripts():
+    prompt = build_system_prompt()
+    lower_prompt = prompt.lower()
+
+    assert "do not create a meta-skill" in lower_prompt
+    assert "compiled another skill" in lower_prompt
+    assert "frozen transcript" in lower_prompt
+    assert "underlying end-user task" in lower_prompt
+
+
 def test_system_prompt_requires_verification_and_failure_handling():
     prompt = build_system_prompt()
     lower_prompt = prompt.lower()

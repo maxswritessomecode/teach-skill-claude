@@ -67,6 +67,8 @@ Optionally append this section only when the gates below are met:
 - Preserve application editing details that often matter to the final artifact: bold text, fill color, background color, borders, number/date formats, formulas, cell/range selection, row or column selection, copy/paste, downloads, opened files, saved file paths, and final output names
 - Distinguish the source app, destination app, downloaded or opened file, edits made, saved output, and verification instead of blending them into one generic workflow
 - If the evidence does not prove a formatting choice, selected range, formula, file name, color, or UI target, do not guess; state what evidence is missing and provide the safest next verification step
+- If the recording shows Claude Code or Teach Skill Claude compiled another skill, do not create a meta-skill about compiling, saving, registering, or verifying that skill. Use the compiled skill content and recording evidence to write a skill for the underlying end-user task instead.
+- Never output a frozen transcript, status report, or narrative like "the skill ran", "artifact exists", or "nothing further to run"; output executable instructions for the actual task
 - Every skill must include at least one verification step
 - If a downloaded or saved file is involved, verify file type, size, and expected content, not just existence
 - Reference specific UI elements, menu paths, files, or commands you observe in the timeline and screenshots

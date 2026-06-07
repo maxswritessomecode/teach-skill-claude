@@ -89,6 +89,23 @@ async def fake_failed_compile(self):
     raise RuntimeError("Agent SDK compile failed: Claude Code returned an error result: success")
 
 
+async def fake_transcript_compile(self):
+    return """---
+name: test-ustrates
+description: Compile this recording into a skill
+---
+
+# test_ustrates
+
+The test_ustrates skill ran and verified clean:
+
+- Artifact exists: C:\\Users\\mshin\\.claude\\skills\\archive-forward-rates-heatmap\\SKILL.md
+- Registered: it shows up in the active skills list.
+
+Nothing further to run.
+"""
+
+
 def test_compile_shows_agent_sdk_errors_without_traceback():
     runner = CliRunner()
     with patch("teach_skill.cli.check_agent_sdk", return_value=True), \
@@ -97,4 +114,19 @@ def test_compile_shows_agent_sdk_errors_without_traceback():
 
     assert result.exit_code == 1
     assert "Agent SDK compile failed" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_compile_rejects_run_report_transcript_without_traceback():
+    runner = CliRunner()
+    with patch("teach_skill.cli.check_agent_sdk", return_value=True), \
+            patch("teach_skill.cli.SkillCompiler.compile", new=fake_transcript_compile):
+        result = runner.invoke(
+            main,
+            ["compile", str(FIXTURE)],
+            input="y\ntest-ustrates\ny\n",
+        )
+
+    assert result.exit_code == 1
+    assert "not an executable skill" in result.output
     assert "Traceback" not in result.output

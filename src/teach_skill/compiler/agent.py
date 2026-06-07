@@ -16,6 +16,12 @@ SDK_ERROR_TEXT_PATTERNS = (
     "max 32mb",
     "error result",
 )
+RUN_REPORT_TRANSCRIPT_PATTERNS = (
+    "skill ran and verified clean",
+    "artifact exists:",
+    "registered: it shows up in the active skills list",
+    "nothing further to run",
+)
 
 
 def check_agent_sdk() -> bool:
@@ -230,6 +236,8 @@ class SkillCompiler:
 
 
 def save_skill(skill_text: str, task_name: str, global_save: bool = True) -> Path:
+    validate_generated_skill_text(skill_text)
+
     if global_save:
         base = Path.home() / ".claude" / "skills" / task_name
     else:
@@ -244,3 +252,22 @@ def save_skill(skill_text: str, task_name: str, global_save: bool = True) -> Pat
 def _looks_like_sdk_error_text(text: str) -> bool:
     normalized = text.strip().lower()
     return any(pattern in normalized for pattern in SDK_ERROR_TEXT_PATTERNS)
+
+
+def validate_generated_skill_text(text: str) -> None:
+    if _looks_like_run_report_transcript(text):
+        raise ValueError(
+            "Generated output is not an executable skill; it looks like a "
+            "run report or transcript. The skill was not saved. Re-record the "
+            "underlying task itself, or edit the generated skill before saving."
+        )
+
+
+def _looks_like_run_report_transcript(text: str) -> bool:
+    normalized = text.strip().lower()
+    matches = sum(
+        1
+        for pattern in RUN_REPORT_TRANSCRIPT_PATTERNS
+        if pattern in normalized
+    )
+    return matches >= 2

@@ -95,7 +95,12 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
             name = name.replace("_", "-")
         task_name = name
 
-    skill_path = save_skill(skill_text, task_name, global_save=save_global)
+    try:
+        skill_path = save_skill(skill_text, task_name, global_save=save_global)
+    except ValueError as e:
+        logger.error("skill save rejected path=%s reason=%s", jsonl_path, e)
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
     logger.info("skill saved path=%s", skill_path)
     click.echo(f"Skill saved to: {skill_path}")

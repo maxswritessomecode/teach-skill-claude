@@ -457,3 +457,31 @@ def test_save_skill_writes_utf8_markdown_on_windows_default_encoding(
     skill_path = save_skill(skill_text, "downloadrates", global_save=False)
 
     assert skill_path.read_text(encoding="utf-8") == skill_text
+
+
+def test_save_skill_rejects_run_report_transcript(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    skill_text = """---
+name: test-ustrates
+description: Compile this recording into a skill
+---
+
+# test_ustrates
+
+The test_ustrates skill ran and verified clean:
+
+- Artifact exists: C:\\Users\\mshin\\.claude\\skills\\archive-forward-rates-heatmap\\SKILL.md
+- Registered: it shows up in the active skills list.
+
+Nothing further to run.
+"""
+
+    try:
+        save_skill(skill_text, "test-ustrates", global_save=False)
+    except ValueError as exc:
+        assert "not an executable skill" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+
+    assert not (tmp_path / ".claude" / "skills" / "test-ustrates").exists()
