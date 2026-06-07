@@ -1,5 +1,11 @@
 import sys
+from contextlib import nullcontext
 from typing import Any
+
+from teach_skill.runtime_log import get_logger
+
+
+logger = get_logger("recorder.ui_context")
 
 
 class UIContextProvider:
@@ -12,26 +18,42 @@ class UIContextProvider:
         try:
             import uiautomation as automation
         except Exception:
+            logger.info("uiautomation package unavailable")
             return
         self._automation = automation
+        logger.info("uiautomation provider enabled")
 
     def context_at_point(self, x: int, y: int) -> dict[str, Any] | None:
         if self._automation is None:
             return None
         try:
-            control = self._automation.ControlFromPoint(int(x), int(y))
-        except Exception:
+            with self._thread_initializer():
+                control = self._automation.ControlFromPoint(int(x), int(y))
+                return self._context_from_control(control)
+        except Exception as exc:
+            logger.info("uiautomation point lookup failed error=%r", exc)
             return None
-        return self._context_from_control(control)
 
     def focused_context(self) -> dict[str, Any] | None:
         if self._automation is None:
             return None
         try:
-            control = self._automation.GetFocusedControl()
-        except Exception:
+            with self._thread_initializer():
+                control = self._automation.GetFocusedControl()
+                return self._context_from_control(control)
+        except Exception as exc:
+            logger.info("uiautomation focused lookup failed error=%r", exc)
             return None
-        return self._context_from_control(control)
+
+    def _thread_initializer(self):
+        initializer = getattr(
+            self._automation,
+            "UIAutomationInitializerInThread",
+            None,
+        )
+        if initializer is None:
+            return nullcontext()
+        return initializer(debug=False)
 
     def _context_from_control(self, control: Any) -> dict[str, Any] | None:
         if control is None:
