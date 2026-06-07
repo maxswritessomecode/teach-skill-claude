@@ -8,6 +8,12 @@ from teach_skill.runtime_log import get_logger
 
 
 logger = get_logger("compiler.agent")
+MAX_SCREENSHOT_PAYLOAD_BYTES = 20 * 1024 * 1024
+SDK_ERROR_TEXT_PATTERNS = (
+    "request too large",
+    "max 32mb",
+    "error result",
+)
 
 
 def check_agent_sdk() -> bool:
@@ -126,12 +132,46 @@ class SkillCompiler:
             },
         }
 
+    def collect_screenshot_image_details_for_prompt(self) -> list[tuple[Path, str, str, str]]:
+        images = []
+        total_bytes = 0
+        omitted = 0
+        for image in self.collect_screenshot_image_details():
+            path, _media_type, _frame_id, _raw_path = image
+            image_size = path.stat().st_size
+            encoded_size = ((image_size + 2) // 3) * 4
+            if total_bytes + encoded_size > MAX_SCREENSHOT_PAYLOAD_BYTES:
+                omitted += 1
+                continue
+            images.append(image)
+            total_bytes += encoded_size
+        if omitted:
+            logger.warning(
+                "omitted screenshots over payload budget attached=%s omitted=%s bytes=%s budget=%s",
+                len(images),
+                omitted,
+                total_bytes,
+                MAX_SCREENSHOT_PAYLOAD_BYTES,
+            )
+        return images
+
     async def iter_prompt_messages(self):
         if not self.recording:
             raise RuntimeError("Call load() before building prompt messages")
 
         content = [{"type": "text", "text": build_user_message(self.recording)}]
-        for path, media_type, frame_id, raw_path in self.collect_screenshot_image_details():
+        all_images = self.collect_screenshot_image_details()
+        prompt_images = self.collect_screenshot_image_details_for_prompt()
+        omitted_count = len(all_images) - len(prompt_images)
+        if omitted_count:
+            content.append({
+                "type": "text",
+                "text": (
+                    f"Screenshots omitted: {omitted_count} image(s) were left out "
+                    "because the Agent SDK request size limit would be exceeded."
+                ),
+            })
+        for path, media_type, frame_id, raw_path in prompt_images:
             content.append({
                 "type": "text",
                 "text": f"Screen {frame_id}: {raw_path}",
@@ -179,7 +219,10 @@ class SkillCompiler:
             raise RuntimeError(f"Agent SDK compile failed: {exc}") from exc
 
         if skill_text_blocks:
-            return "".join(skill_text_blocks)
+            skill_text = "".join(skill_text_blocks)
+            if _looks_like_sdk_error_text(skill_text):
+                raise RuntimeError(skill_text)
+            return skill_text
 
         raise RuntimeError("No text response received from Claude")
 
@@ -194,3 +237,8 @@ def save_skill(skill_text: str, task_name: str, global_save: bool = True) -> Pat
     skill_path = base / "SKILL.md"
     skill_path.write_text(skill_text, encoding="utf-8")
     return skill_path
+
+
+def _looks_like_sdk_error_text(text: str) -> bool:
+    normalized = text.strip().lower()
+    return any(pattern in normalized for pattern in SDK_ERROR_TEXT_PATTERNS)

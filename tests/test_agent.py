@@ -286,6 +286,79 @@ def test_compile_returns_streamed_text_when_sdk_raises_success_result():
     assert result == "compiled skill"
 
 
+def test_compile_rejects_request_too_large_as_skill_text():
+    class AssistantMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class ClaudeAgentOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage([SimpleNamespace(text="Request too large (max 32MB). Try with a smaller file.")])
+
+    fake_sdk = SimpleNamespace(
+        AssistantMessage=AssistantMessage,
+        ClaudeAgentOptions=ClaudeAgentOptions,
+        query=fake_query,
+    )
+
+    compiler = SkillCompiler(FIXTURE)
+    with patch.dict(sys.modules, {"claude_agent_sdk": fake_sdk}), \
+            patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True):
+        try:
+            asyncio.run(compiler.compile())
+        except RuntimeError as exc:
+            assert "Request too large" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
+def test_prompt_stream_limits_attached_screenshot_payload(tmp_path):
+    recording_dir = tmp_path / "recording_20260606_230930"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    image_bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 120
+    events = [{"type": "recording_meta", "machine": "X"}]
+    for index in range(1, 7):
+        frame_name = f"{index:04d}.png"
+        (frames_dir / frame_name).write_bytes(image_bytes)
+        events.append(
+            {
+                "type": "window_switch",
+                "process": "EXCEL.EXE",
+                "title": "Workbook.xlsx - Excel",
+                "screenshot": f"frames/{frame_name}",
+                "frame_id": f"{index:04d}",
+            }
+        )
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+
+    with patch("teach_skill.compiler.agent.MAX_SCREENSHOT_PAYLOAD_BYTES", 500):
+        messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+
+    image_blocks = [
+        block
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "image"
+    ]
+    text_blocks = [
+        block["text"]
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "text"
+    ]
+
+    assert len(image_blocks) < 6
+    assert any("Screenshots omitted" in text for text in text_blocks)
+
+
 def test_compile_wraps_sdk_exception_without_traceback():
     class AssistantMessage:
         pass
