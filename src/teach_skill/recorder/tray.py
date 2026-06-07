@@ -5,7 +5,16 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 import pystray
 from teach_skill.recorder.controller import RecorderController
-from teach_skill.recorder.control import clear_stop_request, is_stop_requested
+from teach_skill.recorder.control import (
+    clear_pause_request,
+    clear_resume_request,
+    clear_stop_request,
+    is_pause_requested,
+    is_resume_requested,
+    is_stop_requested,
+    mark_recording_paused,
+    mark_recording_resumed,
+)
 
 
 def create_tray_icon_image():
@@ -96,9 +105,26 @@ class RecorderTrayApp:
 
     def poll_stop_request(self):
         while self.controller.is_recording:
+            self.apply_recording_controls()
             if self.stop_if_requested():
                 return
             time.sleep(0.5)
+
+    def apply_recording_controls(self) -> bool:
+        if self.recordings_root is None:
+            return False
+        applied = False
+        if is_pause_requested(self.recordings_root):
+            clear_pause_request(self.recordings_root)
+            self.controller.pause_recording()
+            mark_recording_paused(self.recordings_root)
+            applied = True
+        if is_resume_requested(self.recordings_root):
+            clear_resume_request(self.recordings_root)
+            self.controller.resume_recording()
+            mark_recording_resumed(self.recordings_root)
+            applied = True
+        return applied
 
     def stop_if_requested(self) -> bool:
         if self.recordings_root is None or not is_stop_requested(self.recordings_root):

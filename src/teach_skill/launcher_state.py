@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from teach_skill.recording_metadata import load_recording_info
+
 
 @dataclass(frozen=True)
 class RecordingSummary:
     name: str
+    display_name: str
     path: Path
     jsonl_path: Path
     frame_count: int
@@ -30,9 +33,11 @@ def list_recordings(recordings_root: Path, *, limit: int | None = None) -> list[
                 if item.is_file() and item.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
             )
 
+        info = load_recording_info(folder)
         recordings.append(
             RecordingSummary(
                 name=folder.name,
+                display_name=info.title or folder.name,
                 path=folder,
                 jsonl_path=jsonl_path,
                 frame_count=frame_count,

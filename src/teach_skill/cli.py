@@ -168,11 +168,19 @@ def record(test_mode: bool, auto_compile: bool):
     config = load_config()
     recordings_root = Path(config.get("storage_path", str(Path.home() / ".teach-skill" / "recordings")))
     from teach_skill.recorder.lock import RecorderLock, RecordingAlreadyRunning
-    from teach_skill.recorder.control import clear_stop_request
+    from teach_skill.recorder.control import (
+        clear_pause_request,
+        clear_resume_request,
+        clear_stop_request,
+        mark_recording_resumed,
+    )
 
     try:
         with RecorderLock(recordings_root):
+            clear_pause_request(recordings_root)
+            clear_resume_request(recordings_root)
             clear_stop_request(recordings_root)
+            mark_recording_resumed(recordings_root)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             session_dir = recordings_root / f"recording_{timestamp}"
             session_dir.mkdir(parents=True, exist_ok=False)
@@ -193,7 +201,10 @@ def record(test_mode: bool, auto_compile: bool):
             controller = RecorderController(writer, config)
             app = RecorderTrayApp(controller, recordings_root=recordings_root)
             app.start()
+            clear_pause_request(recordings_root)
+            clear_resume_request(recordings_root)
             clear_stop_request(recordings_root)
+            mark_recording_resumed(recordings_root)
 
             if auto_compile:
                 jsonl_path = session_dir / "recording.jsonl"

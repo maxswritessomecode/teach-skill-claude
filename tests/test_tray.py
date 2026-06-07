@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from teach_skill.recorder.control import request_stop
+from teach_skill.recorder.control import request_pause, request_resume, request_stop
 from teach_skill.recorder.tray import RecorderTrayApp
 
 
@@ -38,3 +38,16 @@ def test_tray_app_stop_is_idempotent_when_tray_and_gui_both_stop(tmp_path):
     controller.stop_recording.assert_called_once()
     icon.stop.assert_called_once()
     assert not (tmp_path / ".recording.stop").exists()
+
+
+def test_tray_app_applies_pause_and_resume_requests(tmp_path):
+    controller = MagicMock()
+    app = RecorderTrayApp(controller, recordings_root=tmp_path)
+
+    request_pause(tmp_path)
+    assert app.apply_recording_controls() is True
+    controller.pause_recording.assert_called_once()
+
+    request_resume(tmp_path)
+    assert app.apply_recording_controls() is True
+    controller.resume_recording.assert_called_once()

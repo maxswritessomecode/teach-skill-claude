@@ -17,6 +17,62 @@ def test_recorder_controller_streams_events(tmp_path):
     assert len(lines) == 4  # meta, window_switch, clipboard_text, session_end
 
 
+def test_recorder_controller_ignores_capture_while_paused(tmp_path):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+
+    controller.pause_recording()
+    controller.on_window_switch({"process": "chrome.exe", "title": "Ignore me"})
+    controller.on_click(10, 20, None, True)
+    controller.on_clipboard_change("secret")
+    controller.resume_recording()
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "recording.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [event["type"] for event in events] == [
+        "recording_meta",
+        "recording_paused",
+        "recording_resumed",
+    ]
+
+
+def test_pause_recording_closes_active_session_before_pause_gap(tmp_path, monkeypatch):
+    writer = EventWriter(tmp_path)
+    now = [1000.0]
+    monkeypatch.setattr("teach_skill.recorder.controller.time.time", lambda: now[0])
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Workflow"},
+    )
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+
+    controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
+    controller.on_click(10, 20, None, True)
+    now[0] += 2
+    controller.pause_recording()
+    now[0] += 30
+    controller.stop_recording()
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    session_ends = [event for event in events if event["type"] == "session_end"]
+
+    assert [event["type"] for event in events] == [
+        "recording_meta",
+        "window_switch",
+        "click",
+        "session_end",
+        "recording_paused",
+    ]
+    assert len(session_ends) == 1
+    assert session_ends[0]["duration_s"] == 2
+    assert session_ends[0]["click_count"] == 1
+
+
 def test_recorder_controller_emits_in_app_capture_after_stable_click(tmp_path, monkeypatch):
     writer = EventWriter(tmp_path)
     controller = RecorderController(writer, DEFAULT_CONFIG)

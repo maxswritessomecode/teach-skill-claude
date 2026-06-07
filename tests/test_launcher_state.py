@@ -39,3 +39,18 @@ def test_list_recordings_returns_empty_list_when_root_is_file(tmp_path):
     recordings_root.write_text("not a folder", encoding="utf-8")
 
     assert list_recordings(recordings_root) == []
+
+
+def test_list_recordings_uses_friendly_display_name(tmp_path):
+    recording_dir = tmp_path / "recording_20260607_120000"
+    recording_dir.mkdir()
+    (recording_dir / "recording.jsonl").write_text("{}\n", encoding="utf-8")
+    (recording_dir / "recording-info.json").write_text(
+        '{"title": "Excel pricing cleanup"}\n',
+        encoding="utf-8",
+    )
+
+    recordings = list_recordings(tmp_path)
+
+    assert recordings[0].name == "recording_20260607_120000"
+    assert recordings[0].display_name == "Excel pricing cleanup"

@@ -215,6 +215,55 @@ def test_qt_window_stop_recording_requests_stop_and_refreshes():
     assert window.window.status_bar.messages == ["Recording stop requested"]
 
 
+def test_qt_window_pause_and_resume_recording_refresh_status():
+    import importlib
+
+    module = importlib.import_module("teach_skill.qt_app.app")
+    window = object.__new__(module.TeachSkillQtWindow)
+    messages = []
+    window.window = _FakeWindow()
+    window.services = types.SimpleNamespace(
+        pause_recording=lambda: messages.append("pause") or True,
+        resume_recording=lambda: messages.append("resume") or True,
+    )
+    window.refresh_status = lambda: messages.append("refresh")
+
+    window.pause_recording()
+    window.resume_recording()
+
+    assert messages == ["pause", "refresh", "resume", "refresh"]
+    assert window.window.status_bar.messages == [
+        "Recording pause requested",
+        "Recording resume requested",
+    ]
+
+
+def test_qt_window_rename_and_delete_selected_recording_refreshes():
+    import importlib
+
+    module = importlib.import_module("teach_skill.qt_app.app")
+    recording = types.SimpleNamespace(display_name="Old name")
+    calls = []
+    window = object.__new__(module.TeachSkillQtWindow)
+    window.selected_recording = recording
+    window.services = types.SimpleNamespace(
+        rename_recording=lambda selected, title: calls.append(("rename", selected, title)),
+        delete_recording=lambda selected: calls.append(("delete", selected)),
+    )
+    window.refresh = lambda: calls.append(("refresh",))
+    window.window = _FakeWindow()
+
+    window.rename_selected_recording("New name")
+    window.delete_selected_recording(confirm=True)
+
+    assert calls == [
+        ("rename", recording, "New name"),
+        ("refresh",),
+        ("delete", recording),
+        ("refresh",),
+    ]
+
+
 def test_qt_window_clears_selection_when_review_load_fails(monkeypatch):
     import importlib
 
@@ -228,6 +277,8 @@ def test_qt_window_clears_selection_when_review_load_fails(monkeypatch):
     window.frame_preview = _FakeWidget()
     window.events_text = _FakeWidget()
     window.compile_button = _FakeWidget()
+    window.rename_button = _FakeWidget()
+    window.delete_button = _FakeWidget()
     window.exclude_first_frame_button = _FakeWidget()
     window.mark_sensitive_button = _FakeWidget()
     window.window = _FakeWindow()
@@ -325,6 +376,8 @@ def test_qt_window_review_action_handles_missing_recording(monkeypatch):
     window.frame_preview = _FakeWidget()
     window.events_text = _FakeWidget()
     window.compile_button = _FakeWidget()
+    window.rename_button = _FakeWidget()
+    window.delete_button = _FakeWidget()
     window.exclude_first_frame_button = _FakeWidget()
     window.mark_sensitive_button = _FakeWidget()
     window.window = _FakeWindow()

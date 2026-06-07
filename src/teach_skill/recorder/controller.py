@@ -23,6 +23,7 @@ class RecorderController:
         self.clipboard_monitor = ClipboardMonitor(self.privacy)
         
         self.is_recording = True
+        self.is_paused = False
         self.start_time = time.time()
         self.last_screenshot_time = 0
         self.last_screenshot_frame_id = None
@@ -43,7 +44,7 @@ class RecorderController:
         })
 
     def on_window_switch(self, window_info: dict):
-        if not self.is_recording:
+        if not self.is_recording or self.is_paused:
             return
             
         # Keep a reference to the previous state before updating
@@ -53,25 +54,14 @@ class RecorderController:
         if self.window_tracker.update_active_window(window_info):
             # End previous window session
             if prev_process:
-                clicks, keys, typed_text = self.input_counter.reset()
-                event = {
-                    "type": "session_end",
-                    "process": prev_process,
-                    "title": self.privacy.redact_title(prev_title),
-                    "duration_s": round(time.time() - self.start_time, 1),
-                    "click_count": clicks,
-                    "keystroke_count": keys
-                }
-                if self.config.get("capture_raw_keystrokes", False) and typed_text:
-                    event["keys_typed"] = typed_text
-                self.writer.write_event(event)
+                self._write_session_end(prev_process, prev_title)
             
             # Snap screenshot for the new window switch
             self.capture_screenshot(window_info)
             self.start_time = time.time()
 
     def on_click(self, x, y, button, pressed):
-        if not self.is_recording or not pressed:
+        if not self.is_recording or self.is_paused or not pressed:
             return
         if not self.window_tracker.last_process:
             self.on_window_switch(get_active_window_info())
@@ -123,10 +113,12 @@ class RecorderController:
         self.writer.write_event(event)
 
     def on_press(self, key):
+        if self.is_paused:
+            return
         self.input_counter.on_press(key)
 
     def on_clipboard_change(self, text: str):
-        if not self.is_recording:
+        if not self.is_recording or self.is_paused:
             return
             
         filtered = self.clipboard_monitor.update_content(text)
@@ -143,6 +135,9 @@ class RecorderController:
         event_type: str = "window_switch",
         trigger: str | None = None,
     ):
+        if not self.is_recording or self.is_paused:
+            return
+
         # Apply privacy filter guards
         title = window_info.get("title", "")
         if self.privacy.is_sensitive_title(title):
@@ -159,7 +154,7 @@ class RecorderController:
             self.writer.write_event(event)
             self.last_screenshot_time = time.time()
             return
-            
+
         frame_path = self.writer.next_frame_path()
         img = capture_screenshot_stub()
         img.save(frame_path)
@@ -167,7 +162,7 @@ class RecorderController:
         relative_frame_path = str(frame_path.relative_to(self.writer.session_dir))
         self.last_screenshot_frame_id = frame_id
         self.last_screenshot_frame_path = relative_frame_path
-        
+
         event = {
             "type": event_type,
             "process": window_info.get("process"),
@@ -180,18 +175,52 @@ class RecorderController:
         self.writer.write_event(event)
         self.last_screenshot_time = time.time()
 
+    def _write_session_end(self, process, title) -> bool:
+        if not process:
+            return False
+        clicks, keys, typed_text = self.input_counter.reset()
+        event = {
+            "type": "session_end",
+            "process": process,
+            "title": self.privacy.redact_title(title),
+            "duration_s": round(time.time() - self.start_time, 1),
+            "click_count": clicks,
+            "keystroke_count": keys
+        }
+        if self.config.get("capture_raw_keystrokes", False) and typed_text:
+            event["keys_typed"] = typed_text
+        self.writer.write_event(event)
+        return True
+
+    def _clear_active_session(self):
+        self.window_tracker.last_process = None
+        self.window_tracker.last_title = None
+        self.last_screenshot_frame_id = None
+        self.last_screenshot_frame_path = None
+
+    def pause_recording(self):
+        if self.is_paused:
+            return
+        if self._write_session_end(
+            self.window_tracker.last_process,
+            self.window_tracker.last_title,
+        ):
+            self._clear_active_session()
+        self.is_paused = True
+        self.writer.write_event({"type": "recording_paused"})
+
+    def resume_recording(self):
+        if not self.is_paused:
+            return
+        self.is_paused = False
+        self.start_time = time.time()
+        self.writer.write_event({"type": "recording_resumed"})
+
     def stop_recording(self):
         self.is_recording = False
         if self.window_tracker.last_process:
-            clicks, keys, typed_text = self.input_counter.reset()
-            event = {
-                "type": "session_end",
-                "process": self.window_tracker.last_process,
-                "title": self.privacy.redact_title(self.window_tracker.last_title),
-                "duration_s": round(time.time() - self.start_time, 1),
-                "click_count": clicks,
-                "keystroke_count": keys
-            }
-            if self.config.get("capture_raw_keystrokes", False) and typed_text:
-                event["keys_typed"] = typed_text
-            self.writer.write_event(event)
+            self._write_session_end(
+                self.window_tracker.last_process,
+                self.window_tracker.last_title,
+            )
+            self._clear_active_session()

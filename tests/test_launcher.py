@@ -39,6 +39,7 @@ def test_export_recording_creates_zip_archive(tmp_path):
     (recording_dir / "recording.jsonl").write_text("{}\n", encoding="utf-8")
     recording = RecordingSummary(
         name=recording_dir.name,
+        display_name=recording_dir.name,
         path=recording_dir,
         jsonl_path=recording_dir / "recording.jsonl",
         frame_count=0,
@@ -58,6 +59,7 @@ def test_export_recording_rejects_destination_inside_recording_folder(tmp_path):
     (recording_dir / "recording.jsonl").write_text("{}\n", encoding="utf-8")
     recording = RecordingSummary(
         name=recording_dir.name,
+        display_name=recording_dir.name,
         path=recording_dir,
         jsonl_path=recording_dir / "recording.jsonl",
         frame_count=0,
@@ -81,6 +83,7 @@ def test_export_recording_generates_unique_archive_when_zip_exists(tmp_path):
     (export_dir / "recording_20260531_120000.zip").write_text("existing", encoding="utf-8")
     recording = RecordingSummary(
         name=recording_dir.name,
+        display_name=recording_dir.name,
         path=recording_dir,
         jsonl_path=recording_dir / "recording.jsonl",
         frame_count=0,
@@ -116,6 +119,7 @@ def test_try_export_recording_reports_export_errors(tmp_path):
     (recording_dir / "recording.jsonl").write_text("{}\n", encoding="utf-8")
     recording = RecordingSummary(
         name=recording_dir.name,
+        display_name=recording_dir.name,
         path=recording_dir,
         jsonl_path=recording_dir / "recording.jsonl",
         frame_count=0,
@@ -139,6 +143,7 @@ def test_compile_is_blocked_while_recording_is_active(monkeypatch):
         logger=types.SimpleNamespace(warning=lambda *args, **kwargs: None),
         latest_recording=lambda: RecordingSummary(
             name="recording_20260531_120000",
+            display_name="recording_20260531_120000",
             path="recordings/recording_20260531_120000",
             jsonl_path="recordings/recording_20260531_120000/recording.jsonl",
             frame_count=1,
