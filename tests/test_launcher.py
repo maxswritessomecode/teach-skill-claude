@@ -22,6 +22,29 @@ def test_run_cli_command_can_open_new_console_on_windows(tmp_path):
     assert mock_popen.call_args.kwargs["creationflags"] == 16
 
 
+def test_run_cli_command_can_keep_new_console_open_on_windows(tmp_path):
+    with (
+        patch("teach_skill.launcher.sys.platform", "win32"),
+        patch("teach_skill.launcher.subprocess.CREATE_NEW_CONSOLE", 16, create=True),
+        patch("teach_skill.launcher.sys.executable", r"C:\Python\python.exe"),
+        patch("teach_skill.launcher.subprocess.Popen") as mock_popen,
+    ):
+        _run_cli_command(
+            "compile",
+            str(tmp_path / "recording.jsonl"),
+            new_console=True,
+            keep_console_open=True,
+        )
+
+    assert mock_popen.call_args.args[0][:3] == ["cmd.exe", "/k", r"C:\Python\python.exe"]
+    assert "-m" in mock_popen.call_args.args[0]
+    assert mock_popen.call_args.args[0][-2:] == [
+        "compile",
+        str(tmp_path / "recording.jsonl"),
+    ]
+    assert mock_popen.call_args.kwargs["creationflags"] == 16
+
+
 def test_run_cli_command_uses_frozen_executable_without_module_flag(tmp_path):
     with (
         patch("teach_skill.launcher.sys.executable", "TeachSkillClaude.exe"),

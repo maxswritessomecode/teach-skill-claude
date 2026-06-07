@@ -274,7 +274,7 @@ class TeachSkillQtWindow:
             self.window.statusBar().showMessage("Compile is not ready. Check setup and recording state.")
             return
         self.services.compile_recording(self.selected_recording)
-        self.window.statusBar().showMessage("Sent recording to Agent SDK")
+        self.window.statusBar().showMessage("Agent SDK window opened. Review prompts or errors there.")
 
     def prompt_rename_selected_recording(self) -> None:
         if self.selected_recording is None:

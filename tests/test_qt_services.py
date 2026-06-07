@@ -256,7 +256,7 @@ def test_compile_recording_uses_reviewed_jsonl(tmp_path, monkeypatch):
 
     assert commands[0][0][0] == "compile"
     assert commands[0][0][1].endswith("reviewed-recording.jsonl")
-    assert commands[0][1] == {"new_console": True}
+    assert commands[0][1] == {"new_console": True, "keep_console_open": True}
     filtered_path = recording_dir / "reviewed-recording.jsonl"
     assert filtered_path.read_text(encoding="utf-8") == '{"type": "recording_meta"}\n'
 

@@ -197,6 +197,26 @@ def test_qt_window_blocks_compile_when_setup_is_not_ready():
     ]
 
 
+def test_qt_window_compile_message_points_to_agent_window():
+    import importlib
+
+    module = importlib.import_module("teach_skill.qt_app.app")
+    recording = object()
+    compiled = []
+    window = object.__new__(module.TeachSkillQtWindow)
+    window.selected_recording = recording
+    window.current_status = types.SimpleNamespace(can_compile=True, recording_active=False)
+    window.services = types.SimpleNamespace(compile_recording=lambda selected: compiled.append(selected))
+    window.window = _FakeWindow()
+
+    window.compile_selected()
+
+    assert compiled == [recording]
+    assert window.window.status_bar.messages == [
+        "Agent SDK window opened. Review prompts or errors there."
+    ]
+
+
 def test_qt_window_stop_recording_requests_stop_and_refreshes():
     import importlib
 

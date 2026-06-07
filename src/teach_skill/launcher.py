@@ -10,7 +10,11 @@ from teach_skill.recorder.lock import is_recording_active
 from teach_skill.runtime_log import configure_logging, get_logger
 
 
-def _run_cli_command(*args: str, new_console: bool = False) -> subprocess.Popen:
+def _run_cli_command(
+    *args: str,
+    new_console: bool = False,
+    keep_console_open: bool = False,
+) -> subprocess.Popen:
     kwargs = {}
     if new_console and sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
@@ -18,7 +22,13 @@ def _run_cli_command(*args: str, new_console: bool = False) -> subprocess.Popen:
         command = [sys.executable, *args]
     else:
         command = [sys.executable, "-m", "teach_skill.cli", *args]
-    get_logger("launcher").info("starting subprocess args=%s", args)
+    if keep_console_open and new_console and sys.platform == "win32":
+        command = ["cmd.exe", "/k", *command]
+    get_logger("launcher").info(
+        "starting subprocess args=%s keep_console_open=%s",
+        args,
+        keep_console_open,
+    )
     return subprocess.Popen(command, **kwargs)
 
 

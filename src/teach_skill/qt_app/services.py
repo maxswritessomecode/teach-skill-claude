@@ -121,7 +121,12 @@ class QtAppServices:
         filtered_path = CompileSelection.from_review(review).write_filtered_jsonl(
             recording.path / "reviewed-recording.jsonl"
         )
-        return _run_cli_command("compile", str(filtered_path), new_console=True)
+        return _run_cli_command(
+            "compile",
+            str(filtered_path),
+            new_console=True,
+            keep_console_open=True,
+        )
 
     def open_recordings_folder(self) -> None:
         self.recordings_root.mkdir(parents=True, exist_ok=True)
