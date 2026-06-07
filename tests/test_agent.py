@@ -315,6 +315,44 @@ def test_compile_rejects_request_too_large_as_skill_text():
             raise AssertionError("Expected RuntimeError")
 
 
+def test_compile_rejects_api_error_as_skill_text():
+    class AssistantMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class ClaudeAgentOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(
+            [
+                SimpleNamespace(
+                    text=(
+                        "API Error: 500 Internal server error. "
+                        "This is a server-side issue, usually temporary."
+                    )
+                )
+            ]
+        )
+
+    fake_sdk = SimpleNamespace(
+        AssistantMessage=AssistantMessage,
+        ClaudeAgentOptions=ClaudeAgentOptions,
+        query=fake_query,
+    )
+
+    compiler = SkillCompiler(FIXTURE)
+    with patch.dict(sys.modules, {"claude_agent_sdk": fake_sdk}), \
+            patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True):
+        try:
+            asyncio.run(compiler.compile())
+        except RuntimeError as exc:
+            assert "API Error: 500" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
 def test_prompt_stream_limits_attached_screenshot_payload(tmp_path):
     recording_dir = tmp_path / "recording_20260606_230930"
     frames_dir = recording_dir / "frames"

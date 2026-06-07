@@ -10,6 +10,8 @@ from teach_skill.runtime_log import get_logger
 logger = get_logger("compiler.agent")
 MAX_SCREENSHOT_PAYLOAD_BYTES = 20 * 1024 * 1024
 SDK_ERROR_TEXT_PATTERNS = (
+    "api error:",
+    "internal server error",
     "request too large",
     "max 32mb",
     "error result",
