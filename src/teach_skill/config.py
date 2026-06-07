@@ -7,6 +7,7 @@ DEFAULT_CONFIG = {
     "storage_path": str(Path.home() / ".teach-skill" / "recordings"),
     "screenshot_resolution": "native",
     "privacy_filter": True,
+    "capture_ui_context": True,
 }
 
 

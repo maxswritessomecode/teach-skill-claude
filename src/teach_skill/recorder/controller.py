@@ -9,6 +9,7 @@ from teach_skill.recorder.window import WindowTracker
 from teach_skill.recorder.input import InputCounter
 from teach_skill.recorder.clipboard import ClipboardMonitor
 from teach_skill.recorder.privacy import PrivacyFilter
+from teach_skill.recorder.ui_context import UIContextProvider
 from teach_skill.recorder.compat import get_active_window_info, capture_screenshot_stub
 
 
@@ -21,6 +22,7 @@ class RecorderController:
         self.window_tracker = WindowTracker()
         self.input_counter = InputCounter(capture_raw=config.get("capture_raw_keystrokes", False))
         self.clipboard_monitor = ClipboardMonitor(self.privacy)
+        self.ui_context = UIContextProvider(enabled=config.get("capture_ui_context", True))
         
         self.is_recording = True
         self.is_paused = False
@@ -104,6 +106,9 @@ class RecorderController:
             "y": y,
             "button": str(button) if button is not None else None,
         }
+        ui_context = self._ui_context_at_point(x, y)
+        if ui_context:
+            event["ui_context"] = ui_context
         if self.last_screenshot_frame_id:
             event["screenshot_frame_id"] = self.last_screenshot_frame_id
         if self.last_screenshot_frame_path:
@@ -143,6 +148,7 @@ class RecorderController:
         window_info: dict,
         event_type: str = "window_switch",
         trigger: str | None = None,
+        ui_context: dict | None = None,
     ):
         if not self.is_recording or self.is_paused:
             return
@@ -181,6 +187,8 @@ class RecorderController:
         }
         if trigger:
             event["trigger"] = trigger
+        if ui_context:
+            event["ui_context"] = ui_context
         self.writer.write_event(event)
         self.last_screenshot_time = time.time()
 
@@ -188,6 +196,9 @@ class RecorderController:
         if not self.window_tracker.last_process:
             return
         current_info = get_active_window_info()
+        ui_context = None
+        if not self.privacy.is_sensitive_title(current_info.get("title", "")):
+            ui_context = self._focused_ui_context()
         self.capture_screenshot(
             {
                 "process": current_info.get("process") or self.window_tracker.last_process,
@@ -195,6 +206,7 @@ class RecorderController:
             },
             event_type="post_action_capture",
             trigger=trigger,
+            ui_context=ui_context,
         )
 
     def write_keyboard_shortcut_event(self, shortcut: str):
@@ -202,14 +214,17 @@ class RecorderController:
             self.on_window_switch(get_active_window_info())
         if not self.window_tracker.last_process:
             return
-        self.writer.write_event(
-            {
-                "type": "keyboard_shortcut",
-                "process": self.window_tracker.last_process,
-                "title": self.privacy.redact_title(self.window_tracker.last_title),
-                "shortcut": shortcut,
-            }
-        )
+        event = {
+            "type": "keyboard_shortcut",
+            "process": self.window_tracker.last_process,
+            "title": self.privacy.redact_title(self.window_tracker.last_title),
+            "shortcut": shortcut,
+        }
+        if not self.privacy.is_sensitive_title(self.window_tracker.last_title):
+            ui_context = self._focused_ui_context()
+            if ui_context:
+                event["ui_context"] = ui_context
+        self.writer.write_event(event)
 
     def _finish_pointer_action(self, x, y, button):
         if self.drag_start is None:
@@ -261,16 +276,74 @@ class RecorderController:
             self.capture_post_action("drag_select")
             return
         self.writer.write_event(
-            {
-                "type": "drag_select",
-                "process": process,
-                "title": self.privacy.redact_title(title),
-                "start": [start_x, start_y],
-                "end": [end_x, end_y],
-                "button": str(button) if button is not None else drag_button,
-            }
+            self._with_ui_context_pair(
+                {
+                    "type": "drag_select",
+                    "process": process,
+                    "title": self.privacy.redact_title(title),
+                    "start": [start_x, start_y],
+                    "end": [end_x, end_y],
+                    "button": str(button) if button is not None else drag_button,
+                },
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+            )
         )
         self.capture_post_action("drag_select")
+
+    def _ui_context_at_point(self, x: int, y: int) -> dict | None:
+        try:
+            context = self.ui_context.context_at_point(x, y)
+        except Exception:
+            return None
+        return self._sanitize_ui_context(context)
+
+    def _focused_ui_context(self) -> dict | None:
+        try:
+            context = self.ui_context.focused_context()
+        except Exception:
+            return None
+        return self._sanitize_ui_context(context)
+
+    def _with_ui_context_pair(
+        self,
+        event: dict,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+    ) -> dict:
+        start_context = self._ui_context_at_point(start_x, start_y)
+        end_context = self._ui_context_at_point(end_x, end_y)
+        if start_context:
+            event["ui_context_start"] = start_context
+        if end_context:
+            event["ui_context_end"] = end_context
+        return event
+
+    def _sanitize_ui_context(self, context):
+        if not context:
+            return None
+        if isinstance(context, dict):
+            sanitized = {}
+            for key, value in context.items():
+                cleaned = self._sanitize_ui_context(value)
+                if cleaned not in (None, "", [], {}):
+                    sanitized[key] = cleaned
+            return sanitized
+        if isinstance(context, list):
+            cleaned_items = [
+                self._sanitize_ui_context(item)
+                for item in context[:8]
+            ]
+            return [item for item in cleaned_items if item not in (None, "", [], {})]
+        if isinstance(context, str):
+            return self.privacy.redact_ui_text(context)
+        if isinstance(context, (int, float, bool)):
+            return context
+        return self.privacy.redact_ui_text(str(context))
 
     def _write_session_end(self, process, title) -> bool:
         if not process:

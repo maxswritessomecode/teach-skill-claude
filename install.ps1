@@ -77,7 +77,7 @@ try {
     
     # Verify recorder-only imports are available after installing extras
     Write-Host "  Verifying recorder imports..." -ForegroundColor White
-    $verifyOutput = & .\.venv\Scripts\python.exe -c "import win32gui, win32process, win32clipboard, win32con, psutil; from PIL import Image; import pynput, pystray" 2>&1
+    $verifyOutput = & .\.venv\Scripts\python.exe -c "import win32gui, win32process, win32clipboard, win32con, psutil, uiautomation; from PIL import Image; import pynput, pystray" 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Recorder import verification failed: $verifyOutput"
     }
@@ -111,6 +111,7 @@ if (Test-Path $configFile) {
         "screenshot_resolution" = "native"
         "privacy_filter" = $true
         "capture_raw_keystrokes" = $false
+        "capture_ui_context" = $true
     }
     
     $configJson = $configObj | ConvertTo-Json -Depth 5

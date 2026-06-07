@@ -17,6 +17,7 @@ setup(
             "Pillow",
             "pystray",
             "psutil",
+            "uiautomation",
         ],
         "ui": [
             "PySide6",

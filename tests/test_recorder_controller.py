@@ -70,6 +70,39 @@ def test_recorder_controller_records_keyboard_shortcut_and_post_action_capture(
     assert captures[0]["screenshot"].startswith("frames/")
 
 
+def test_recorder_controller_records_focused_ui_context_for_shortcuts(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(
+        focused_context={
+            "name": "Bold",
+            "control_type": "Button",
+            "class_name": "NetUIRibbonButton",
+        }
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "EXCEL.EXE", "title": "Workbook.xlsx - Excel"},
+    )
+
+    controller.on_press("Key.ctrl_l")
+    controller.on_press("b")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    shortcut = [event for event in events if event["type"] == "keyboard_shortcut"][0]
+    capture = [event for event in events if event["type"] == "post_action_capture"][0]
+
+    assert shortcut["ui_context"]["name"] == "Bold"
+    assert shortcut["ui_context"]["control_type"] == "Button"
+    assert capture["ui_context"]["name"] == "Bold"
+
+
 def test_recorder_controller_does_not_record_shift_typing_as_shortcut(
     tmp_path,
     monkeypatch,
@@ -157,6 +190,12 @@ def test_recorder_controller_records_drag_selection_and_post_action_capture(
 ):
     writer = EventWriter(tmp_path)
     controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(
+        point_contexts={
+            (10, 20): {"name": "A1", "control_type": "DataItem"},
+            (100, 140): {"name": "D8", "control_type": "DataItem"},
+        }
+    )
     monkeypatch.setattr(
         "teach_skill.recorder.controller.get_active_window_info",
         lambda: {"process": "chrome.exe", "title": "Web app"},
@@ -175,6 +214,8 @@ def test_recorder_controller_records_drag_selection_and_post_action_capture(
 
     assert drags[0]["start"] == [10, 20]
     assert drags[0]["end"] == [100, 140]
+    assert drags[0]["ui_context_start"]["name"] == "A1"
+    assert drags[0]["ui_context_end"]["name"] == "D8"
     assert captures[-1]["trigger"] == "drag_select"
 
 
@@ -298,6 +339,19 @@ def test_recorder_controller_emits_in_app_capture_after_stable_click(tmp_path, m
 def test_recorder_controller_writes_structured_click_event(tmp_path, monkeypatch):
     writer = EventWriter(tmp_path)
     controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(
+        point_contexts={
+            (42, 84): {
+                "name": "Conditional Formatting",
+                "control_type": "MenuItem",
+                "automation_id": "ConditionalFormattingGallery",
+                "parent_path": [
+                    {"name": "Home", "control_type": "TabItem"},
+                    {"name": "Styles", "control_type": "Group"},
+                ],
+            }
+        }
+    )
 
     now = [1000.0]
     monkeypatch.setattr("teach_skill.recorder.controller.time.time", lambda: now[0])
@@ -326,7 +380,35 @@ def test_recorder_controller_writes_structured_click_event(tmp_path, monkeypatch
     assert click["button"] == "Button.left"
     assert click["screenshot_frame_id"] == "0001"
     assert click["screenshot_frame_path"] == "frames/0001.png"
+    assert click["ui_context"]["name"] == "Conditional Formatting"
+    assert click["ui_context"]["control_type"] == "MenuItem"
+    assert click["ui_context"]["parent_path"][0]["name"] == "Home"
     assert "ts" in click
+
+
+def test_ui_context_omitted_when_window_is_sensitive(tmp_path, monkeypatch):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(
+        point_contexts={(42, 84): {"name": "Password", "control_type": "Edit"}}
+    )
+
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Okta sign in"},
+    )
+
+    controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text().strip().split("\n")
+    ]
+    click = [event for event in events if event["type"] == "click"][0]
+
+    assert click["details_redacted"] == "sensitive_title"
+    assert "ui_context" not in click
 
 
 def test_first_click_samples_active_window_and_records_click(tmp_path, monkeypatch):
@@ -460,3 +542,15 @@ def test_click_after_unpolled_window_switch_records_window_switch_not_in_app_cap
     assert events[-2]["y"] == 20
     assert events[-2]["screenshot_frame_id"] == "0002"
     assert events[-1]["type"] == "post_action_capture"
+
+
+class FakeUIContextProvider:
+    def __init__(self, point_contexts=None, focused_context=None):
+        self.point_contexts = point_contexts or {}
+        self._focused_context = focused_context
+
+    def context_at_point(self, x, y):
+        return self.point_contexts.get((x, y))
+
+    def focused_context(self):
+        return self._focused_context

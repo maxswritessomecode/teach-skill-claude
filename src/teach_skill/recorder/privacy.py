@@ -44,7 +44,19 @@ class PrivacyFilter:
             return "[auth/login - redacted]"
         return title
 
+    def redact_ui_text(self, text: str) -> str:
+        if not self.enabled:
+            return _compact_text(text)
+        compact = _compact_text(text)
+        if _title_regex.search(compact) or _clipboard_regex.search(compact):
+            return "[redacted]"
+        return compact
+
     def is_sensitive_clipboard(self, text: str) -> bool:
         if not self.enabled:
             return False
         return bool(_clipboard_regex.search(text))
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text)).strip()[:160]

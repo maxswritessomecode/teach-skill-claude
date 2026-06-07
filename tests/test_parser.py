@@ -167,3 +167,66 @@ def test_recording_timeline_text_includes_generic_action_events(tmp_path):
     assert "Dragged Button.left from (10, 20) to (100, 140)" in text
     assert "Post-action screen after shortcut:ctrl+b" in text
     assert "screen: 0002" in text
+
+
+def test_recording_timeline_text_includes_ui_context(tmp_path):
+    recording = tmp_path / "recording.jsonl"
+    recording.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:00Z",
+                        "type": "click",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "x": 42,
+                        "y": 84,
+                        "button": "Button.left",
+                        "ui_context": {
+                            "name": "Conditional Formatting",
+                            "control_type": "MenuItem",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:01Z",
+                        "type": "keyboard_shortcut",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "shortcut": "ctrl+b",
+                        "ui_context": {
+                            "name": "Bold",
+                            "control_type": "Button",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:02Z",
+                        "type": "drag_select",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "start": [10, 20],
+                        "end": [100, 140],
+                        "button": "Button.left",
+                        "ui_context_start": {
+                            "name": "A1",
+                            "control_type": "DataItem",
+                        },
+                        "ui_context_end": {
+                            "name": "D8",
+                            "control_type": "DataItem",
+                        },
+                    }
+                ),
+            ]
+        )
+    )
+
+    text = parse_recording(recording).timeline_text()
+
+    assert "on MenuItem \"Conditional Formatting\"" in text
+    assert "targeting Button \"Bold\"" in text
+    assert "from DataItem \"A1\" to DataItem \"D8\"" in text
