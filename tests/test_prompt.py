@@ -46,6 +46,30 @@ def test_system_prompt_requires_agent_executable_steps():
     assert "requires a human-only gui action" in lower_prompt
 
 
+def test_system_prompt_prioritizes_structured_action_events():
+    prompt = build_system_prompt()
+    lower_prompt = prompt.lower()
+
+    assert "keyboard_shortcut" in lower_prompt
+    assert "ui_context" in lower_prompt
+    assert "post_action_capture" in lower_prompt
+    assert "drag_select" in lower_prompt
+    assert "selected screenshots" in lower_prompt
+
+
+def test_system_prompt_preserves_office_style_formatting_details():
+    prompt = build_system_prompt()
+    lower_prompt = prompt.lower()
+
+    assert "bold" in lower_prompt
+    assert "fill color" in lower_prompt
+    assert "background color" in lower_prompt
+    assert "border" in lower_prompt
+    assert "formula" in lower_prompt
+    assert "cell/range selection" in lower_prompt
+    assert "do not guess" in lower_prompt
+
+
 def test_system_prompt_requires_verification_and_failure_handling():
     prompt = build_system_prompt()
     lower_prompt = prompt.lower()
