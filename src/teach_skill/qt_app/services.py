@@ -7,6 +7,7 @@ from teach_skill.diagnostics import create_support_bundle
 from teach_skill.doctor import DoctorResult, run_doctor
 from teach_skill.launcher import SingleProcessRunner, _open_folder, _run_cli_command
 from teach_skill.launcher_state import RecordingSummary, list_recordings
+from teach_skill.recorder.control import request_stop
 from teach_skill.recorder.lock import is_recording_active
 from teach_skill.review import CompileSelection, load_recording_review
 from teach_skill.runtime_log import log_path
@@ -55,6 +56,12 @@ class QtAppServices:
 
     def start_recording(self) -> bool:
         return self.recorder_runner.start(lambda: _run_cli_command("record"))
+
+    def stop_recording(self) -> bool:
+        if not is_recording_active(self.recordings_root):
+            return False
+        request_stop(self.recordings_root)
+        return True
 
     def compile_recording(self, recording: RecordingSummary) -> subprocess.Popen:
         recording_path = recording.path.resolve()

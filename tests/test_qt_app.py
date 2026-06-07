@@ -197,6 +197,24 @@ def test_qt_window_blocks_compile_when_setup_is_not_ready():
     ]
 
 
+def test_qt_window_stop_recording_requests_stop_and_refreshes():
+    import importlib
+
+    module = importlib.import_module("teach_skill.qt_app.app")
+    window = object.__new__(module.TeachSkillQtWindow)
+    stopped = []
+    refreshed = []
+    window.services = types.SimpleNamespace(stop_recording=lambda: stopped.append(True) or True)
+    window.refresh = lambda: refreshed.append(True)
+    window.window = _FakeWindow()
+
+    window.stop_recording()
+
+    assert stopped == [True]
+    assert refreshed == [True]
+    assert window.window.status_bar.messages == ["Recording stop requested"]
+
+
 def test_qt_window_clears_selection_when_review_load_fails(monkeypatch):
     import importlib
 

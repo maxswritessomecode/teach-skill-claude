@@ -1,9 +1,11 @@
 import sys
 import threading
 import time
+from pathlib import Path
 from PIL import Image, ImageDraw
 import pystray
 from teach_skill.recorder.controller import RecorderController
+from teach_skill.recorder.control import clear_stop_request, is_stop_requested
 
 
 def create_tray_icon_image():
@@ -16,13 +18,17 @@ def create_tray_icon_image():
 
 
 class RecorderTrayApp:
-    def __init__(self, controller: RecorderController):
+    def __init__(self, controller: RecorderController, recordings_root: Path | None = None):
         self.controller = controller
+        self.recordings_root = recordings_root
         self.icon = None
         self.polling_thread = None
         self.clipboard_thread = None
+        self.stop_request_thread = None
         self.keyboard_listener = None
         self.mouse_listener = None
+        self._stop_lock = threading.Lock()
+        self._stopping = False
 
     def start(self):
         # Create system tray icon
@@ -42,6 +48,9 @@ class RecorderTrayApp:
 
         self.clipboard_thread = threading.Thread(target=self.poll_clipboard, daemon=True)
         self.clipboard_thread.start()
+
+        self.stop_request_thread = threading.Thread(target=self.poll_stop_request, daemon=True)
+        self.stop_request_thread.start()
 
         # Run system tray icon on the main thread (blocking loop)
         self.icon.run()
@@ -83,6 +92,27 @@ class RecorderTrayApp:
             time.sleep(0.5)
 
     def on_stop(self, icon, item):
+        self.stop(icon)
+
+    def poll_stop_request(self):
+        while self.controller.is_recording:
+            if self.stop_if_requested():
+                return
+            time.sleep(0.5)
+
+    def stop_if_requested(self) -> bool:
+        if self.recordings_root is None or not is_stop_requested(self.recordings_root):
+            return False
+        clear_stop_request(self.recordings_root)
+        self.stop(self.icon)
+        return True
+
+    def stop(self, icon) -> bool:
+        with self._stop_lock:
+            if self._stopping:
+                return False
+            self._stopping = True
+
         # Stop recording loop and flush metadata
         self.controller.stop_recording()
 
@@ -99,5 +129,7 @@ class RecorderTrayApp:
                 pass
 
         # Stop system tray icon loop and quit
-        icon.stop()
+        if icon is not None:
+            icon.stop()
         print("Recording saved successfully. Run `teach-skill compile` to build your skill!")
+        return True

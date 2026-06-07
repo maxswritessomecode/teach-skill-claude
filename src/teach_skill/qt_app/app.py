@@ -7,7 +7,7 @@ from teach_skill.review import load_recording_review
 
 def _import_qt() -> dict:
     try:
-        from PySide6.QtCore import Qt
+        from PySide6.QtCore import Qt, QTimer
         from PySide6.QtGui import QPixmap
         from PySide6.QtWidgets import (
             QApplication,
@@ -33,6 +33,7 @@ def _import_qt() -> dict:
 
     return {
         "Qt": Qt,
+        "QTimer": QTimer,
         "QPixmap": QPixmap,
         "QApplication": QApplication,
         "QHBoxLayout": QHBoxLayout,
@@ -79,6 +80,10 @@ class TeachSkillQtWindow:
 
         self._build_ui()
         self.refresh()
+        self.status_timer = qt["QTimer"](self.window)
+        self.status_timer.setInterval(1000)
+        self.status_timer.timeout.connect(self.refresh_status)
+        self.status_timer.start()
 
     def __getattr__(self, name):
         return getattr(self.window, name)
@@ -94,11 +99,13 @@ class TeachSkillQtWindow:
         sidebar_layout = qt["QVBoxLayout"](sidebar)
         self.status_label = qt["QLabel"]("Checking setup...")
         self.start_button = qt["QPushButton"]("Start Recording")
+        self.stop_button = qt["QPushButton"]("Stop Recording")
         self.refresh_button = qt["QPushButton"]("Refresh")
         self.recordings_list = qt["QListWidget"]()
 
         sidebar_layout.addWidget(self.status_label)
         sidebar_layout.addWidget(self.start_button)
+        sidebar_layout.addWidget(self.stop_button)
         sidebar_layout.addWidget(self.refresh_button)
         sidebar_layout.addWidget(qt["QLabel"]("Recent recordings"))
         sidebar_layout.addWidget(self.recordings_list)
@@ -131,6 +138,7 @@ class TeachSkillQtWindow:
         self.window.setCentralWidget(central)
 
         self.start_button.clicked.connect(self.start_recording)
+        self.stop_button.clicked.connect(self.stop_recording)
         self.refresh_button.clicked.connect(self.refresh)
         self.recordings_list.currentRowChanged.connect(self.select_recording)
         self.exclude_first_frame_button.clicked.connect(self.exclude_first_frame)
@@ -138,16 +146,16 @@ class TeachSkillQtWindow:
         self.compile_button.clicked.connect(self.compile_selected)
 
     def refresh(self) -> None:
-        status = self.services.status()
-        self.current_status = status
-        self.status_label.setText(f"{status.state_label}: {status.setup_status}")
-        self.start_button.setEnabled(status.can_record and not status.recording_active)
+        self.refresh_status()
         self.compile_button.setEnabled(False)
         self.exclude_first_frame_button.setEnabled(False)
         self.mark_sensitive_button.setEnabled(False)
         self.selected_recording = None
         self.review = None
 
+        self.refresh_recordings()
+
+    def refresh_recordings(self) -> None:
         self.recordings = self.services.recent_recordings()
         self.recordings_list.blockSignals(True)
         self.recordings_list.clear()
@@ -159,12 +167,35 @@ class TeachSkillQtWindow:
             self.recordings_list.addItem(item)
         self.recordings_list.blockSignals(False)
 
+    def refresh_status(self) -> None:
+        was_recording_active = (
+            self.current_status is not None
+            and self.current_status.recording_active
+        )
+        status = self.services.status()
+        self.current_status = status
+        self.status_label.setText(f"{status.state_label}: {status.setup_status}")
+        self.start_button.setEnabled(status.can_record and not status.recording_active)
+        self.stop_button.setEnabled(status.recording_active)
+        if self.selected_recording is not None:
+            self.compile_button.setEnabled(self._can_compile_selected())
+        if was_recording_active and not status.recording_active:
+            self.refresh_recordings()
+
     def start_recording(self) -> None:
         started = self.services.start_recording()
         if started:
             self.window.statusBar().showMessage("Recording started")
         else:
             self.window.statusBar().showMessage("Recording is already running")
+        self.refresh()
+
+    def stop_recording(self) -> None:
+        stopped = self.services.stop_recording()
+        if stopped:
+            self.window.statusBar().showMessage("Recording stop requested")
+        else:
+            self.window.statusBar().showMessage("No active recording to stop")
         self.refresh()
 
     def select_recording(self, index: int) -> None:

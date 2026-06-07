@@ -72,6 +72,24 @@ def test_services_start_recorder_delegates_to_launcher_runner(tmp_path):
     assert starts == [("record",)]
 
 
+def test_services_stop_recording_requests_stop_when_recording_is_active(tmp_path, monkeypatch):
+    monkeypatch.setattr("teach_skill.qt_app.services.is_recording_active", lambda root: True)
+
+    stopped = QtAppServices(recordings_root=tmp_path).stop_recording()
+
+    assert stopped is True
+    assert (tmp_path / ".recording.stop").exists()
+
+
+def test_services_stop_recording_reports_when_no_recording_is_active(tmp_path, monkeypatch):
+    monkeypatch.setattr("teach_skill.qt_app.services.is_recording_active", lambda root: False)
+
+    stopped = QtAppServices(recordings_root=tmp_path).stop_recording()
+
+    assert stopped is False
+    assert not (tmp_path / ".recording.stop").exists()
+
+
 def test_compile_recording_uses_reviewed_jsonl(tmp_path, monkeypatch):
     recording_dir = tmp_path / "recording_20260602_120000"
     frames_dir = recording_dir / "frames"
