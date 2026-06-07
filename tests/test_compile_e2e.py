@@ -83,3 +83,18 @@ def test_compile_blocks_recording_under_active_recordings_root(tmp_path):
 
     assert result.exit_code == 1
     assert "Stop the active recording before compiling a skill" in result.output
+
+
+async def fake_failed_compile(self):
+    raise RuntimeError("Agent SDK compile failed: Claude Code returned an error result: success")
+
+
+def test_compile_shows_agent_sdk_errors_without_traceback():
+    runner = CliRunner()
+    with patch("teach_skill.cli.check_agent_sdk", return_value=True), \
+            patch("teach_skill.cli.SkillCompiler.compile", new=fake_failed_compile):
+        result = runner.invoke(main, ["compile", str(FIXTURE)])
+
+    assert result.exit_code == 1
+    assert "Agent SDK compile failed" in result.output
+    assert "Traceback" not in result.output

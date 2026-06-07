@@ -4,6 +4,10 @@ from pathlib import Path, PureWindowsPath
 
 from teach_skill.compiler.parser import parse_recording, Recording
 from teach_skill.compiler.prompt import build_system_prompt, build_user_message
+from teach_skill.runtime_log import get_logger
+
+
+logger = get_logger("compiler.agent")
 
 
 def check_agent_sdk() -> bool:
@@ -158,14 +162,21 @@ class SkillCompiler:
         )
 
         skill_text_blocks = []
-        async for message in query(
-            prompt=self.iter_prompt_messages(),
-            options=options,
-        ):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        skill_text_blocks.append(block.text)
+        try:
+            async for message in query(
+                prompt=self.iter_prompt_messages(),
+                options=options,
+            ):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if hasattr(block, "text"):
+                            skill_text_blocks.append(block.text)
+        except Exception as exc:
+            logger.exception("agent sdk compile failed")
+            if skill_text_blocks:
+                logger.warning("using streamed skill text after sdk exception")
+                return "".join(skill_text_blocks)
+            raise RuntimeError(f"Agent SDK compile failed: {exc}") from exc
 
         if skill_text_blocks:
             return "".join(skill_text_blocks)

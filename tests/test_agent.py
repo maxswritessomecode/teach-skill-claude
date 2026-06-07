@@ -259,6 +259,63 @@ def test_compile_sends_prompt_stream_to_agent_sdk():
     assert any(block["type"] == "image" for block in messages[0]["message"]["content"])
 
 
+def test_compile_returns_streamed_text_when_sdk_raises_success_result():
+    class AssistantMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class ClaudeAgentOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage([SimpleNamespace(text="compiled skill")])
+        raise Exception("Claude Code returned an error result: success")
+
+    fake_sdk = SimpleNamespace(
+        AssistantMessage=AssistantMessage,
+        ClaudeAgentOptions=ClaudeAgentOptions,
+        query=fake_query,
+    )
+
+    compiler = SkillCompiler(FIXTURE)
+    with patch.dict(sys.modules, {"claude_agent_sdk": fake_sdk}), \
+            patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True):
+        result = asyncio.run(compiler.compile())
+
+    assert result == "compiled skill"
+
+
+def test_compile_wraps_sdk_exception_without_traceback():
+    class AssistantMessage:
+        pass
+
+    class ClaudeAgentOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    async def fake_query(*, prompt, options):
+        raise Exception("Claude Code returned an error result: success")
+        yield
+
+    fake_sdk = SimpleNamespace(
+        AssistantMessage=AssistantMessage,
+        ClaudeAgentOptions=ClaudeAgentOptions,
+        query=fake_query,
+    )
+
+    compiler = SkillCompiler(FIXTURE)
+    with patch.dict(sys.modules, {"claude_agent_sdk": fake_sdk}), \
+            patch("teach_skill.compiler.agent.check_agent_sdk", return_value=True):
+        try:
+            asyncio.run(compiler.compile())
+        except RuntimeError as exc:
+            assert "Agent SDK compile failed" in str(exc)
+            assert "Claude Code returned an error result: success" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
 def test_save_skill_writes_utf8_markdown_on_windows_default_encoding(
     tmp_path,
     monkeypatch,
