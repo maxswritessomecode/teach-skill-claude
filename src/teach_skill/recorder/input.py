@@ -85,7 +85,10 @@ class InputCounter:
 
     def _key_name(self, key) -> str:
         if hasattr(key, "char") and key.char is not None:
-            return str(key.char).lower()
+            char = str(key.char)
+            if len(char) == 1 and 1 <= ord(char) <= 26:
+                return chr(ord(char) + ord("a") - 1)
+            return char.lower()
         text = str(key)
         if len(text) == 1:
             return text.lower()

@@ -68,6 +68,19 @@ def test_input_counter_detects_keyboard_shortcuts_without_raw_capture():
     assert text == ""
 
 
+def test_input_counter_normalizes_ctrl_letter_control_characters():
+    class Key:
+        char = "\x02"
+
+    counter = InputCounter(capture_raw=False)
+
+    assert counter.on_press("Key.ctrl_l") is None
+    shortcut = counter.on_press(Key())
+    counter.on_release("Key.ctrl_l")
+
+    assert shortcut == "ctrl+b"
+
+
 def test_input_counter_tracks_modifier_release():
     counter = InputCounter()
 
