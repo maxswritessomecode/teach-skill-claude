@@ -119,3 +119,51 @@ def test_recording_timeline_text_describes_missing_click_button(tmp_path):
 
     assert "Clicked unknown button at (42, 84)" in text
     assert "Clicked None" not in text
+
+
+def test_recording_timeline_text_includes_generic_action_events(tmp_path):
+    recording = tmp_path / "recording.jsonl"
+    recording.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:00Z",
+                        "type": "keyboard_shortcut",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "shortcut": "ctrl+b",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:01Z",
+                        "type": "drag_select",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "start": [10, 20],
+                        "end": [100, 140],
+                        "button": "Button.left",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "ts": "2026-06-07T15:00:02Z",
+                        "type": "post_action_capture",
+                        "process": "EXCEL.EXE",
+                        "title": "Workbook.xlsx - Excel",
+                        "trigger": "shortcut:ctrl+b",
+                        "screenshot": "frames/0002.png",
+                        "frame_id": "0002",
+                    }
+                ),
+            ]
+        )
+    )
+
+    text = parse_recording(recording).timeline_text()
+
+    assert "Pressed shortcut ctrl+b" in text
+    assert "Dragged Button.left from (10, 20) to (100, 140)" in text
+    assert "Post-action screen after shortcut:ctrl+b" in text
+    assert "screen: 0002" in text

@@ -36,6 +36,26 @@ class Recording:
                     f"[{ts}] In-app action in: {event['process']} — "
                     f"\"{event.get('title', '')}\"{screen}"
                 )
+            elif etype == "post_action_capture":
+                screen = _screen_suffix(event.get("frame_id"))
+                lines.append(
+                    f"[{ts}] Post-action screen after {event.get('trigger', 'action')} "
+                    f"in: {event['process']} — \"{event.get('title', '')}\"{screen}"
+                )
+            elif etype == "keyboard_shortcut":
+                lines.append(
+                    f"[{ts}] Pressed shortcut {event.get('shortcut', '')} "
+                    f"in: {event['process']} — \"{event.get('title', '')}\""
+                )
+            elif etype == "drag_select":
+                button = event.get("button") or "unknown button"
+                start = event.get("start") or ["?", "?"]
+                end = event.get("end") or ["?", "?"]
+                lines.append(
+                    f"[{ts}] Dragged {button} from ({start[0]}, {start[1]}) "
+                    f"to ({end[0]}, {end[1]}) "
+                    f"in: {event['process']} — \"{event.get('title', '')}\""
+                )
             elif etype == "click":
                 screen = _screen_suffix(event.get("screenshot_frame_id"))
                 button = event.get("button") or "unknown button"

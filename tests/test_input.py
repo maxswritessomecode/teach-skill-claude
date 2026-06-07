@@ -52,3 +52,39 @@ def test_input_counter_captures_raw_keys():
     clicks, keys, text = counter.reset()
     assert text == "he "
     assert keys == 5
+
+
+def test_input_counter_detects_keyboard_shortcuts_without_raw_capture():
+    counter = InputCounter(capture_raw=False)
+
+    assert counter.on_press("Key.ctrl_l") is None
+    shortcut = counter.on_press("b")
+    counter.on_release("Key.ctrl_l")
+
+    assert shortcut == "ctrl+b"
+    clicks, keys, text = counter.reset()
+    assert clicks == 0
+    assert keys == 2
+    assert text == ""
+
+
+def test_input_counter_tracks_modifier_release():
+    counter = InputCounter()
+
+    counter.on_press("Key.ctrl_l")
+    counter.on_release("Key.ctrl_l")
+
+    assert counter.on_press("b") is None
+
+
+def test_input_counter_does_not_treat_shift_printable_as_shortcut():
+    counter = InputCounter(capture_raw=True)
+
+    assert counter.on_press("Key.shift") is None
+    assert counter.on_press("h") is None
+    counter.on_release("Key.shift")
+
+    clicks, keys, text = counter.reset()
+    assert clicks == 0
+    assert keys == 2
+    assert text == "h"

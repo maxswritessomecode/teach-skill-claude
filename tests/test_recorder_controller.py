@@ -24,6 +24,10 @@ def test_recorder_controller_ignores_capture_while_paused(tmp_path):
     controller.pause_recording()
     controller.on_window_switch({"process": "chrome.exe", "title": "Ignore me"})
     controller.on_click(10, 20, None, True)
+    controller.on_press("Key.ctrl_l")
+    controller.on_press("b")
+    controller.on_release("Key.ctrl_l")
+    controller.on_click(10, 20, None, False)
     controller.on_clipboard_change("secret")
     controller.resume_recording()
 
@@ -38,6 +42,193 @@ def test_recorder_controller_ignores_capture_while_paused(tmp_path):
     ]
 
 
+def test_recorder_controller_records_keyboard_shortcut_and_post_action_capture(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "EXCEL.EXE", "title": "Workbook.xlsx - Excel"},
+    )
+
+    controller.on_press("Key.ctrl_l")
+    controller.on_press("b")
+    controller.on_release("Key.ctrl_l")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    shortcuts = [event for event in events if event["type"] == "keyboard_shortcut"]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+
+    assert shortcuts[0]["shortcut"] == "ctrl+b"
+    assert shortcuts[0]["process"] == "EXCEL.EXE"
+    assert captures[0]["trigger"] == "shortcut:ctrl+b"
+    assert captures[0]["screenshot"].startswith("frames/")
+
+
+def test_recorder_controller_does_not_record_shift_typing_as_shortcut(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, {**DEFAULT_CONFIG, "capture_raw_keystrokes": True})
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "WINWORD.EXE", "title": "Document.docx - Word"},
+    )
+
+    controller.on_window_switch({"process": "WINWORD.EXE", "title": "Document.docx - Word"})
+    controller.on_press("Key.shift")
+    controller.on_press("h")
+    controller.on_release("Key.shift")
+    controller.stop_recording()
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert [event for event in events if event["type"] == "keyboard_shortcut"] == []
+    assert [event for event in events if event["type"] == "post_action_capture"] == []
+    assert events[-1]["keys_typed"] == "h"
+
+
+def test_post_action_capture_resamples_sensitive_active_window(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
+    active_windows = iter(
+        [
+            {"process": "chrome.exe", "title": "Workflow"},
+            {"process": "chrome.exe", "title": "Okta sign in"},
+        ]
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: next(active_windows),
+    )
+
+    controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+
+    assert captures[0]["title"] == "[auth/login - redacted]"
+    assert captures[0]["screenshot"] == "suppressed:auth_detected"
+    assert "frame_id" not in captures[0]
+
+
+def test_recorder_controller_records_post_click_capture(tmp_path, monkeypatch):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "powerpnt.exe", "title": "Deck.pptx - PowerPoint"},
+    )
+
+    controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+
+    assert captures[0]["trigger"] == "click"
+    assert captures[0]["process"] == "powerpnt.exe"
+    assert captures[0]["screenshot"].startswith("frames/")
+
+
+def test_recorder_controller_records_drag_selection_and_post_action_capture(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Web app"},
+    )
+
+    controller.on_click(10, 20, "Button.left", True)
+    controller.on_move(80, 120)
+    controller.on_click(100, 140, "Button.left", False)
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    drags = [event for event in events if event["type"] == "drag_select"]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+
+    assert drags[0]["start"] == [10, 20]
+    assert drags[0]["end"] == [100, 140]
+    assert captures[-1]["trigger"] == "drag_select"
+
+
+def test_drag_selection_redacts_sensitive_window_details(tmp_path, monkeypatch):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Okta sign in"},
+    )
+    controller.on_window_switch({"process": "chrome.exe", "title": "Okta sign in"})
+
+    controller.on_click(10, 20, "Button.left", True)
+    controller.on_move(80, 120)
+    controller.on_click(100, 140, "Button.left", False)
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    drag = [event for event in events if event["type"] == "drag_select"][0]
+
+    assert drag["title"] == "[auth/login - redacted]"
+    assert drag["details_redacted"] == "sensitive_title"
+    assert "start" not in drag
+    assert "end" not in drag
+    assert "button" not in drag
+
+
+def test_shortcut_post_action_capture_resamples_sensitive_active_window(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Okta sign in"},
+    )
+
+    controller.on_press("Key.ctrl_l")
+    controller.on_press("b")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+
+    assert captures[0]["title"] == "[auth/login - redacted]"
+    assert captures[0]["screenshot"] == "suppressed:auth_detected"
+
+
 def test_pause_recording_closes_active_session_before_pause_gap(tmp_path, monkeypatch):
     writer = EventWriter(tmp_path)
     now = [1000.0]
@@ -50,6 +241,7 @@ def test_pause_recording_closes_active_session_before_pause_gap(tmp_path, monkey
 
     controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
     controller.on_click(10, 20, None, True)
+    controller.on_click(10, 20, None, False)
     now[0] += 2
     controller.pause_recording()
     now[0] += 30
@@ -65,6 +257,7 @@ def test_pause_recording_closes_active_session_before_pause_gap(tmp_path, monkey
         "recording_meta",
         "window_switch",
         "click",
+        "post_action_capture",
         "session_end",
         "recording_paused",
     ]
@@ -87,6 +280,7 @@ def test_recorder_controller_emits_in_app_capture_after_stable_click(tmp_path, m
     controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
     now[0] += 6
     controller.on_click(10, 20, None, True)
+    controller.on_click(10, 20, None, False)
 
     events = [
         json.loads(line)
@@ -115,6 +309,7 @@ def test_recorder_controller_writes_structured_click_event(tmp_path, monkeypatch
     controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
     now[0] += 1
     controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
 
     events = [
         json.loads(line)
@@ -144,6 +339,7 @@ def test_first_click_samples_active_window_and_records_click(tmp_path, monkeypat
     )
 
     controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
 
     events = [
         json.loads(line)
@@ -154,11 +350,12 @@ def test_first_click_samples_active_window_and_records_click(tmp_path, monkeypat
         "recording_meta",
         "window_switch",
         "click",
+        "post_action_capture",
     ]
     assert events[-1]["process"] == "chrome.exe"
     assert events[-1]["title"] == "Workflow"
-    assert events[-1]["x"] == 42
-    assert events[-1]["y"] == 84
+    assert events[-2]["x"] == 42
+    assert events[-2]["y"] == 84
 
 
 def test_click_event_omits_frame_after_sensitive_screenshot_is_suppressed(
@@ -180,6 +377,7 @@ def test_click_event_omits_frame_after_sensitive_screenshot_is_suppressed(
     active_window = {"process": "chrome.exe", "title": "Okta sign in"}
     now[0] += 6
     controller.on_click(42, 84, "Button.left", True)
+    controller.on_click(42, 84, "Button.left", False)
 
     events = [
         json.loads(line)
@@ -210,8 +408,10 @@ def test_recorder_controller_rate_limits_in_app_capture(tmp_path, monkeypatch):
     controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
     now[0] += 6
     controller.on_click(10, 20, None, True)
+    controller.on_click(10, 20, None, False)
     now[0] += 1
     controller.on_click(30, 40, None, True)
+    controller.on_click(30, 40, None, False)
 
     events = [
         json.loads(line)
@@ -222,7 +422,7 @@ def test_recorder_controller_rate_limits_in_app_capture(tmp_path, monkeypatch):
     clicks = [event for event in events if event["type"] == "click"]
     assert len(clicks) == 2
     assert clicks[0]["screenshot_frame_id"] == "0002"
-    assert clicks[1]["screenshot_frame_id"] == "0002"
+    assert clicks[1]["screenshot_frame_id"] == "0003"
 
 
 def test_click_after_unpolled_window_switch_records_window_switch_not_in_app_capture(
@@ -242,6 +442,7 @@ def test_click_after_unpolled_window_switch_records_window_switch_not_in_app_cap
     controller.on_window_switch({"process": "chrome.exe", "title": "Workflow"})
     now[0] += 6
     controller.on_click(10, 20, None, True)
+    controller.on_click(10, 20, None, False)
 
     events = [
         json.loads(line)
@@ -249,12 +450,13 @@ def test_click_after_unpolled_window_switch_records_window_switch_not_in_app_cap
     ]
 
     assert [event["type"] for event in events].count("in_app_capture") == 0
-    assert events[-2]["type"] == "window_switch"
+    assert events[-3]["type"] == "window_switch"
+    assert events[-3]["process"] == "outlook.exe"
+    assert events[-3]["title"] == "Inbox"
+    assert events[-2]["type"] == "click"
     assert events[-2]["process"] == "outlook.exe"
     assert events[-2]["title"] == "Inbox"
-    assert events[-1]["type"] == "click"
-    assert events[-1]["process"] == "outlook.exe"
-    assert events[-1]["title"] == "Inbox"
-    assert events[-1]["x"] == 10
-    assert events[-1]["y"] == 20
-    assert events[-1]["screenshot_frame_id"] == "0002"
+    assert events[-2]["x"] == 10
+    assert events[-2]["y"] == 20
+    assert events[-2]["screenshot_frame_id"] == "0002"
+    assert events[-1]["type"] == "post_action_capture"

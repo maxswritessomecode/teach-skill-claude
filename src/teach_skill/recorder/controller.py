@@ -29,6 +29,9 @@ class RecorderController:
         self.last_screenshot_frame_id = None
         self.last_screenshot_frame_path = None
         self.in_app_capture_interval_s = 5.0
+        self.drag_start = None
+        self.drag_last = None
+        self.drag_button = None
         
         # Write initial metadata event
         try:
@@ -61,7 +64,10 @@ class RecorderController:
             self.start_time = time.time()
 
     def on_click(self, x, y, button, pressed):
-        if not self.is_recording or self.is_paused or not pressed:
+        if not self.is_recording or self.is_paused:
+            return
+        if not pressed:
+            self._finish_pointer_action(x, y, button)
             return
         if not self.window_tracker.last_process:
             self.on_window_switch(get_active_window_info())
@@ -76,17 +82,9 @@ class RecorderController:
             self.on_window_switch(current_info)
 
         self.input_counter.on_click(x, y, button, pressed)
-        if time.time() - self.last_screenshot_time >= self.in_app_capture_interval_s:
-            self.capture_screenshot(
-                {
-                    "process": self.window_tracker.last_process,
-                    "title": self.window_tracker.last_title,
-                },
-                event_type="in_app_capture",
-                trigger="click_after_5s",
-            )
-
-        self.write_click_event(x, y, button)
+        self.drag_start = (x, y)
+        self.drag_last = (x, y)
+        self.drag_button = str(button) if button is not None else None
 
     def write_click_event(self, x, y, button):
         if self.privacy.is_sensitive_title(self.window_tracker.last_title):
@@ -115,7 +113,18 @@ class RecorderController:
     def on_press(self, key):
         if self.is_paused:
             return
-        self.input_counter.on_press(key)
+        shortcut = self.input_counter.on_press(key)
+        if shortcut:
+            self.write_keyboard_shortcut_event(shortcut)
+            self.capture_post_action(f"shortcut:{shortcut}")
+
+    def on_release(self, key):
+        self.input_counter.on_release(key)
+
+    def on_move(self, x, y):
+        if not self.is_recording or self.is_paused or self.drag_start is None:
+            return
+        self.drag_last = (x, y)
 
     def on_clipboard_change(self, text: str):
         if not self.is_recording or self.is_paused:
@@ -175,6 +184,94 @@ class RecorderController:
         self.writer.write_event(event)
         self.last_screenshot_time = time.time()
 
+    def capture_post_action(self, trigger: str):
+        if not self.window_tracker.last_process:
+            return
+        current_info = get_active_window_info()
+        self.capture_screenshot(
+            {
+                "process": current_info.get("process") or self.window_tracker.last_process,
+                "title": current_info.get("title") or self.window_tracker.last_title,
+            },
+            event_type="post_action_capture",
+            trigger=trigger,
+        )
+
+    def write_keyboard_shortcut_event(self, shortcut: str):
+        if not self.window_tracker.last_process:
+            self.on_window_switch(get_active_window_info())
+        if not self.window_tracker.last_process:
+            return
+        self.writer.write_event(
+            {
+                "type": "keyboard_shortcut",
+                "process": self.window_tracker.last_process,
+                "title": self.privacy.redact_title(self.window_tracker.last_title),
+                "shortcut": shortcut,
+            }
+        )
+
+    def _finish_pointer_action(self, x, y, button):
+        if self.drag_start is None:
+            return
+        start_x, start_y = self.drag_start
+        end_x, end_y = x, y
+        self.drag_start = None
+        self.drag_last = None
+        drag_button = self.drag_button
+        self.drag_button = None
+        if abs(end_x - start_x) < 5 and abs(end_y - start_y) < 5:
+            if time.time() - self.last_screenshot_time >= self.in_app_capture_interval_s:
+                self.capture_screenshot(
+                    {
+                        "process": self.window_tracker.last_process,
+                        "title": self.window_tracker.last_title,
+                    },
+                    event_type="in_app_capture",
+                    trigger="click_after_5s",
+                )
+            self.write_click_event(start_x, start_y, button)
+            self.capture_post_action("click")
+            return
+        if not self.window_tracker.last_process:
+            return
+        current_info = get_active_window_info()
+        process = current_info.get("process") or self.window_tracker.last_process
+        title = current_info.get("title") or self.window_tracker.last_title
+        if self.privacy.is_sensitive_title(title):
+            self.writer.write_event(
+                {
+                    "type": "drag_select",
+                    "process": process,
+                    "title": "[auth/login - redacted]",
+                    "details_redacted": "sensitive_title",
+                }
+            )
+            self.capture_post_action("drag_select")
+            return
+        if self.privacy.is_sensitive_title(self.window_tracker.last_title):
+            self.writer.write_event(
+                {
+                    "type": "drag_select",
+                    "process": process,
+                    "title": "[auth/login - redacted]",
+                    "details_redacted": "sensitive_title",
+                }
+            )
+            self.capture_post_action("drag_select")
+            return
+        self.writer.write_event(
+            {
+                "type": "drag_select",
+                "process": process,
+                "title": self.privacy.redact_title(title),
+                "start": [start_x, start_y],
+                "end": [end_x, end_y],
+                "button": str(button) if button is not None else drag_button,
+            }
+        )
+        self.capture_post_action("drag_select")
+
     def _write_session_end(self, process, title) -> bool:
         if not process:
             return False
@@ -197,6 +294,9 @@ class RecorderController:
         self.window_tracker.last_title = None
         self.last_screenshot_frame_id = None
         self.last_screenshot_frame_path = None
+        self.drag_start = None
+        self.drag_last = None
+        self.drag_button = None
 
     def pause_recording(self):
         if self.is_paused:

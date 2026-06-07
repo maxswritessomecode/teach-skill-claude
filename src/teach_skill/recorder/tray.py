@@ -70,8 +70,14 @@ class RecorderTrayApp:
             from pynput import keyboard, mouse
             
             # Hook the controller's callback handlers
-            self.keyboard_listener = keyboard.Listener(on_press=self.controller.on_press)
-            self.mouse_listener = mouse.Listener(on_click=self.controller.on_click)
+            self.keyboard_listener = keyboard.Listener(
+                on_press=self.controller.on_press,
+                on_release=self.controller.on_release,
+            )
+            self.mouse_listener = mouse.Listener(
+                on_click=self.controller.on_click,
+                on_move=self.controller.on_move,
+            )
 
             self.keyboard_listener.start()
             self.mouse_listener.start()
