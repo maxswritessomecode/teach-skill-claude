@@ -1,3 +1,4 @@
 click
 claude-agent-sdk
 pytest
+Pillow

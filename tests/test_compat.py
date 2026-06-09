@@ -1,6 +1,10 @@
 import sys
 from types import SimpleNamespace
-from teach_skill.recorder.compat import get_active_window_info, capture_screenshot_stub
+from teach_skill.recorder.compat import (
+    get_active_window_info,
+    capture_screenshot,
+    capture_screenshot_stub,
+)
 
 
 def test_active_window_info_returns_dict():
@@ -17,10 +21,14 @@ def test_active_window_info_returns_test_fallback_when_win32_is_unavailable():
         assert "Mock Title" in info["title"]
 
 
-def test_capture_screenshot_stub_returns_image():
+def test_capture_screenshot_returns_image():
     from PIL import Image
-    img = capture_screenshot_stub()
+    img = capture_screenshot()
     assert isinstance(img, Image.Image)
+
+
+def test_capture_screenshot_stub_alias_is_kept_for_compatibility():
+    assert capture_screenshot_stub is capture_screenshot
 
 
 def test_get_clipboard_text_returns_string():

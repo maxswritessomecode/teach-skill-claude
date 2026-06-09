@@ -1,6 +1,6 @@
+import hashlib
 import sys
 import time
-from pathlib import Path
 from PIL import Image
 import socket
 
@@ -10,7 +10,23 @@ from teach_skill.recorder.input import InputCounter
 from teach_skill.recorder.clipboard import ClipboardMonitor
 from teach_skill.recorder.privacy import PrivacyFilter
 from teach_skill.recorder.ui_context import UIContextProvider
-from teach_skill.recorder.compat import get_active_window_info, capture_screenshot_stub
+from teach_skill.recorder.compat import get_active_window_info, capture_screenshot
+from teach_skill.runtime_log import get_logger
+
+
+logger = get_logger("recorder.controller")
+
+
+GENERIC_UI_CONTEXT_TYPES = {
+    "",
+    "Pane",
+    "Window",
+    "Document",
+    "Group",
+    "Custom",
+    "Image",
+}
+SCREENSHOT_CAPTURE_MODES = {"adaptive", "all", "minimal"}
 
 
 class RecorderController:
@@ -30,6 +46,10 @@ class RecorderController:
         self.last_screenshot_time = 0
         self.last_screenshot_frame_id = None
         self.last_screenshot_frame_path = None
+        self.last_frame_hash = None
+        self.screenshot_capture_mode = self._screenshot_capture_mode(
+            config.get("screenshot_capture_mode", "adaptive")
+        )
         self.in_app_capture_interval_s = 5.0
         self.drag_start = None
         self.drag_last = None
@@ -156,8 +176,7 @@ class RecorderController:
         # Apply privacy filter guards
         title = window_info.get("title", "")
         if self.privacy.is_sensitive_title(title):
-            self.last_screenshot_frame_id = None
-            self.last_screenshot_frame_path = None
+            self._clear_last_screenshot_frame()
             event = {
                 "type": event_type,
                 "process": window_info.get("process"),
@@ -170,40 +189,104 @@ class RecorderController:
             self.last_screenshot_time = time.time()
             return
 
+        if self.screenshot_capture_mode == "minimal" and event_type != "window_switch":
+            self._write_capture_event(
+                window_info,
+                event_type=event_type,
+                trigger=trigger,
+                ui_context=ui_context,
+            )
+            self.last_screenshot_time = time.time()
+            return
+
+        try:
+            img = capture_screenshot()
+            frame_hash = self._image_hash(img)
+        except Exception:
+            logger.exception("screenshot capture failed")
+            self._clear_last_screenshot_frame()
+            self._write_capture_event(
+                window_info,
+                event_type=event_type,
+                trigger=trigger,
+                ui_context=ui_context,
+                screenshot="suppressed:capture_failed",
+            )
+            self.last_screenshot_time = time.time()
+            return
+        if (
+            event_type == "post_action_capture"
+            and frame_hash == self.last_frame_hash
+            and self.last_screenshot_frame_id
+            and self.last_screenshot_frame_path
+        ):
+            self._write_capture_event(
+                window_info,
+                event_type=event_type,
+                trigger=trigger,
+                ui_context=ui_context,
+                screenshot=self.last_screenshot_frame_path,
+                frame_id=self.last_screenshot_frame_id,
+                deduped_from_frame_id=self.last_screenshot_frame_id,
+            )
+            self.last_screenshot_time = time.time()
+            return
+
         frame_path = self.writer.next_frame_path()
-        img = capture_screenshot_stub()
-        img.save(frame_path)
+        try:
+            img.save(frame_path)
+        except Exception:
+            logger.exception("screenshot save failed path=%s", frame_path)
+            self._clear_last_screenshot_frame()
+            self._write_capture_event(
+                window_info,
+                event_type=event_type,
+                trigger=trigger,
+                ui_context=ui_context,
+                screenshot="suppressed:capture_failed",
+            )
+            self.last_screenshot_time = time.time()
+            return
         frame_id = frame_path.stem
         relative_frame_path = str(frame_path.relative_to(self.writer.session_dir))
         self.last_screenshot_frame_id = frame_id
         self.last_screenshot_frame_path = relative_frame_path
+        self.last_frame_hash = frame_hash
 
-        event = {
-            "type": event_type,
-            "process": window_info.get("process"),
-            "title": title,
-            "screenshot": relative_frame_path,
-            "frame_id": frame_id
-        }
-        if trigger:
-            event["trigger"] = trigger
-        if ui_context:
-            event["ui_context"] = ui_context
-        self.writer.write_event(event)
+        self._write_capture_event(
+            window_info,
+            event_type=event_type,
+            trigger=trigger,
+            ui_context=ui_context,
+            screenshot=relative_frame_path,
+            frame_id=frame_id,
+        )
         self.last_screenshot_time = time.time()
 
     def capture_post_action(self, trigger: str):
         if not self.window_tracker.last_process:
             return
         current_info = get_active_window_info()
+        window_info = {
+            "process": current_info.get("process") or self.window_tracker.last_process,
+            "title": current_info.get("title") or self.window_tracker.last_title,
+        }
         ui_context = None
         if not self.privacy.is_sensitive_title(current_info.get("title", "")):
             ui_context = self._focused_ui_context()
+        if (
+            self.screenshot_capture_mode == "adaptive"
+            and self._post_action_context_is_descriptive(ui_context)
+        ):
+            self._write_capture_event(
+                window_info,
+                event_type="post_action_capture",
+                trigger=trigger,
+                ui_context=ui_context,
+            )
+            return
         self.capture_screenshot(
-            {
-                "process": current_info.get("process") or self.window_tracker.last_process,
-                "title": current_info.get("title") or self.window_tracker.last_title,
-            },
+            window_info,
             event_type="post_action_capture",
             trigger=trigger,
             ui_context=ui_context,
@@ -323,6 +406,59 @@ class RecorderController:
             event["ui_context_end"] = end_context
         return event
 
+    def _write_capture_event(
+        self,
+        window_info: dict,
+        event_type: str,
+        trigger: str | None = None,
+        ui_context: dict | None = None,
+        screenshot: str | None = None,
+        frame_id: str | None = None,
+        deduped_from_frame_id: str | None = None,
+    ) -> None:
+        event = {
+            "type": event_type,
+            "process": window_info.get("process"),
+            "title": window_info.get("title", ""),
+        }
+        if screenshot:
+            event["screenshot"] = screenshot
+        if frame_id:
+            event["frame_id"] = frame_id
+        if deduped_from_frame_id:
+            event["deduped_from_frame_id"] = deduped_from_frame_id
+        if trigger:
+            event["trigger"] = trigger
+        if ui_context:
+            event["ui_context"] = ui_context
+        self.writer.write_event(event)
+
+    def _post_action_context_is_descriptive(self, ui_context) -> bool:
+        if not isinstance(ui_context, dict):
+            return False
+        name = str(ui_context.get("name") or "").strip()
+        control_type = str(ui_context.get("control_type") or "").strip()
+        return bool(name) and control_type not in GENERIC_UI_CONTEXT_TYPES
+
+    def _image_hash(self, img: Image.Image) -> str:
+        digest = hashlib.sha1()
+        digest.update(str(img.mode).encode("utf-8"))
+        digest.update(str(img.size).encode("utf-8"))
+        digest.update(img.tobytes())
+        return digest.hexdigest()
+
+    def _screenshot_capture_mode(self, raw_mode) -> str:
+        mode = str(raw_mode or "adaptive").strip().lower()
+        if mode not in SCREENSHOT_CAPTURE_MODES:
+            logger.warning("invalid screenshot_capture_mode=%s; using adaptive", raw_mode)
+            return "adaptive"
+        return mode
+
+    def _clear_last_screenshot_frame(self) -> None:
+        self.last_screenshot_frame_id = None
+        self.last_screenshot_frame_path = None
+        self.last_frame_hash = None
+
     def _sanitize_ui_context(self, context):
         if not context:
             return None
@@ -365,8 +501,7 @@ class RecorderController:
     def _clear_active_session(self):
         self.window_tracker.last_process = None
         self.window_tracker.last_title = None
-        self.last_screenshot_frame_id = None
-        self.last_screenshot_frame_path = None
+        self._clear_last_screenshot_frame()
         self.drag_start = None
         self.drag_last = None
         self.drag_button = None

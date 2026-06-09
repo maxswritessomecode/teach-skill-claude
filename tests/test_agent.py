@@ -1,10 +1,13 @@
 import asyncio
 import base64
 import json
+import random
 import sys
+from io import BytesIO
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
+from PIL import Image
 from teach_skill.compiler.agent import SkillCompiler, check_agent_sdk, save_skill
 
 
@@ -30,6 +33,11 @@ def test_compiler_load_recording():
     compiler.load()
     assert compiler.recording is not None
     assert compiler.recording.meta["machine"] == "DESKTOP-TEST"
+
+
+def test_compiler_rejects_nonpositive_max_image_edge():
+    compiler = SkillCompiler(FIXTURE, compile_max_image_edge=0)
+    assert compiler.compile_max_image_edge == 1568
 
 
 def test_compiler_collect_screenshots_resolves_paths():
@@ -80,9 +88,24 @@ def test_compiler_prompt_stream_labels_screenshot_image_blocks():
     ]
 
 
-def test_compiler_prompt_stream_skips_unsafe_missing_and_non_image_screenshots(tmp_path):
-    from PIL import Image
+def test_build_image_block_downscales_images_before_encoding(tmp_path):
+    frame_path = tmp_path / "large.png"
+    rng = random.Random(0)
+    pixels = bytes(rng.randrange(256) for _ in range(300 * 200 * 3))
+    Image.frombytes("RGB", (300, 200), pixels).save(frame_path)
+    original_bytes = frame_path.read_bytes()
 
+    compiler = SkillCompiler(FIXTURE, compile_max_image_edge=64)
+    block = compiler.build_image_block(frame_path, "image/png")
+    decoded = base64.b64decode(block["source"]["data"])
+    image = Image.open(BytesIO(decoded))
+
+    assert max(image.size) <= 64
+    assert len(decoded) < len(original_bytes)
+    assert frame_path.read_bytes() == original_bytes
+
+
+def test_compiler_prompt_stream_skips_unsafe_missing_and_non_image_screenshots(tmp_path):
     recording_dir = tmp_path / "recording"
     frames_dir = recording_dir / "frames"
     frames_dir.mkdir(parents=True)
@@ -395,6 +418,130 @@ def test_prompt_stream_limits_attached_screenshot_payload(tmp_path):
 
     assert len(image_blocks) < 6
     assert any("Screenshots omitted" in text for text in text_blocks)
+
+
+def test_prompt_stream_trims_by_frame_value_and_preserves_chronological_order(tmp_path):
+    recording_dir = tmp_path / "recording_20260609_090000"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    frame_names = ["0001.png", "0002.png", "0003.png"]
+    colors = ["red", "green", "blue"]
+    for frame_name, color in zip(frame_names, colors):
+        Image.new("RGB", (2, 2), color).save(frames_dir / frame_name)
+
+    events = [
+        {"type": "recording_meta", "machine": "X"},
+        {
+            "type": "window_switch",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0001.png",
+            "frame_id": "0001",
+        },
+        {
+            "type": "post_action_capture",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0002.png",
+            "frame_id": "0002",
+            "ui_context": {"name": "Bold", "control_type": "Button"},
+        },
+        {
+            "type": "click",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0003.png",
+            "frame_id": "0003",
+        },
+    ]
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    keep_budget = sum(
+        ((frames_dir / frame_name).stat().st_size + 2) // 3 * 4
+        for frame_name in ("0001.png", "0003.png")
+    )
+
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+
+    with patch("teach_skill.compiler.agent.MAX_SCREENSHOT_PAYLOAD_BYTES", keep_budget):
+        messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+
+    labels = [
+        block["text"]
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+
+    assert labels == [
+        "Screen 0001: frames/0001.png",
+        "Screen 0003: frames/0003.png",
+    ]
+    assert any(
+        block["type"] == "text" and "Screenshots omitted: 1" in block["text"]
+        for block in messages[0]["message"]["content"]
+    )
+
+
+def test_prompt_stream_does_not_force_last_frame_over_payload_budget(tmp_path):
+    recording_dir = tmp_path / "recording_20260609_100000"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    rng = random.Random(1)
+    for frame_name in ("0001.png", "0002.png"):
+        pixels = bytes(rng.randrange(256) for _ in range(200 * 200 * 3))
+        Image.frombytes("RGB", (200, 200), pixels).save(frames_dir / frame_name)
+
+    events = [
+        {"type": "recording_meta", "machine": "X"},
+        {
+            "type": "window_switch",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0001.png",
+            "frame_id": "0001",
+        },
+        {
+            "type": "post_action_capture",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0002.png",
+            "frame_id": "0002",
+        },
+    ]
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    first_budget = ((frames_dir / "0001.png").stat().st_size + 2) // 3 * 4
+
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+
+    with patch("teach_skill.compiler.agent.MAX_SCREENSHOT_PAYLOAD_BYTES", first_budget):
+        messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+
+    image_blocks = [
+        block
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "image"
+    ]
+    labels = [
+        block["text"]
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+    total_encoded_bytes = sum(
+        len(block["source"]["data"].encode("ascii"))
+        for block in image_blocks
+    )
+
+    assert labels == ["Screen 0001: frames/0001.png"]
+    assert total_encoded_bytes <= first_budget
 
 
 def test_compile_wraps_sdk_exception_without_traceback():

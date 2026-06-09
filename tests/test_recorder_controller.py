@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from PIL import Image
 from teach_skill.recorder.controller import RecorderController
 from teach_skill.recorder.writer import EventWriter
 from teach_skill.config import DEFAULT_CONFIG
@@ -101,6 +102,7 @@ def test_recorder_controller_records_focused_ui_context_for_shortcuts(
     assert shortcut["ui_context"]["name"] == "Bold"
     assert shortcut["ui_context"]["control_type"] == "Button"
     assert capture["ui_context"]["name"] == "Bold"
+    assert "screenshot" not in capture
 
 
 def test_recorder_controller_does_not_record_shift_typing_as_shortcut(
@@ -182,6 +184,166 @@ def test_recorder_controller_records_post_click_capture(tmp_path, monkeypatch):
     assert captures[0]["trigger"] == "click"
     assert captures[0]["process"] == "powerpnt.exe"
     assert captures[0]["screenshot"].startswith("frames/")
+
+
+def test_adaptive_post_action_capture_skips_descriptive_ui_context(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(
+        focused_context={"name": "Submit order", "control_type": "Button"}
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Checkout"},
+    )
+    controller.window_tracker.last_process = "chrome.exe"
+    controller.window_tracker.last_title = "Checkout"
+
+    controller.capture_post_action("click")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    capture = [event for event in events if event["type"] == "post_action_capture"][0]
+
+    assert capture["trigger"] == "click"
+    assert capture["ui_context"] == {"name": "Submit order", "control_type": "Button"}
+    assert "screenshot" not in capture
+    assert list((tmp_path / "frames").glob("*.png")) == []
+
+
+def test_invalid_screenshot_capture_mode_falls_back_to_adaptive(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(
+        writer,
+        {**DEFAULT_CONFIG, "screenshot_capture_mode": "surprise"},
+    )
+    controller.ui_context = FakeUIContextProvider(
+        focused_context={"name": "Submit order", "control_type": "Button"}
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Checkout"},
+    )
+    controller.window_tracker.last_process = "chrome.exe"
+    controller.window_tracker.last_title = "Checkout"
+
+    controller.capture_post_action("click")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    capture = [event for event in events if event["type"] == "post_action_capture"][0]
+
+    assert controller.screenshot_capture_mode == "adaptive"
+    assert "screenshot" not in capture
+
+
+def test_adaptive_post_action_capture_keeps_screenshot_without_ui_context(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(focused_context=None)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Canvas app"},
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.capture_screenshot",
+        lambda: Image.new("RGB", (4, 4), "green"),
+    )
+    controller.window_tracker.last_process = "chrome.exe"
+    controller.window_tracker.last_title = "Canvas app"
+
+    controller.capture_post_action("click")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    capture = [event for event in events if event["type"] == "post_action_capture"][0]
+
+    assert capture["trigger"] == "click"
+    assert capture["screenshot"] == "frames/0001.png"
+    assert capture["frame_id"] == "0001"
+    assert (tmp_path / "frames" / "0001.png").is_file()
+
+
+def test_capture_screenshot_failure_writes_suppressed_event(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.capture_screenshot",
+        lambda: (_ for _ in ()).throw(RuntimeError("display unavailable")),
+    )
+
+    controller.capture_screenshot(
+        {"process": "chrome.exe", "title": "Workflow"},
+        event_type="post_action_capture",
+        trigger="click",
+    )
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    capture = [event for event in events if event["type"] == "post_action_capture"][0]
+
+    assert capture["trigger"] == "click"
+    assert capture["screenshot"] == "suppressed:capture_failed"
+    assert "frame_id" not in capture
+    assert list((tmp_path / "frames").glob("*.png")) == []
+
+
+def test_capture_screenshot_failure_clears_stale_frame_reference(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.window_tracker.last_process = "chrome.exe"
+    controller.window_tracker.last_title = "Workflow"
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.capture_screenshot",
+        lambda: Image.new("RGB", (4, 4), "green"),
+    )
+    controller.capture_screenshot({"process": "chrome.exe", "title": "Workflow"})
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.capture_screenshot",
+        lambda: (_ for _ in ()).throw(RuntimeError("display unavailable")),
+    )
+
+    controller.capture_screenshot(
+        {"process": "chrome.exe", "title": "Workflow"},
+        event_type="post_action_capture",
+        trigger="click",
+    )
+    controller.write_click_event(10, 20, "Button.left")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    click = [event for event in events if event["type"] == "click"][0]
+
+    assert controller.last_screenshot_frame_id is None
+    assert controller.last_screenshot_frame_path is None
+    assert controller.last_frame_hash is None
+    assert "screenshot_frame_id" not in click
+    assert "screenshot_frame_path" not in click
 
 
 def test_recorder_controller_records_drag_selection_and_post_action_capture(
@@ -268,6 +430,41 @@ def test_shortcut_post_action_capture_resamples_sensitive_active_window(
 
     assert captures[0]["title"] == "[auth/login - redacted]"
     assert captures[0]["screenshot"] == "suppressed:auth_detected"
+
+
+def test_post_action_capture_dedups_identical_back_to_back_frames(
+    tmp_path,
+    monkeypatch,
+):
+    writer = EventWriter(tmp_path)
+    controller = RecorderController(writer, DEFAULT_CONFIG)
+    controller.ui_context = FakeUIContextProvider(focused_context=None)
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.get_active_window_info",
+        lambda: {"process": "chrome.exe", "title": "Workflow"},
+    )
+    monkeypatch.setattr(
+        "teach_skill.recorder.controller.capture_screenshot",
+        lambda: Image.new("RGB", (4, 4), "blue"),
+    )
+    controller.window_tracker.last_process = "chrome.exe"
+    controller.window_tracker.last_title = "Workflow"
+
+    controller.capture_post_action("click")
+    controller.capture_post_action("click")
+
+    events = [
+        json.loads(line)
+        for line in writer.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    captures = [event for event in events if event["type"] == "post_action_capture"]
+    frame_paths = sorted((tmp_path / "frames").glob("*.png"))
+
+    assert len(frame_paths) == 1
+    assert captures[0]["screenshot"] == "frames/0001.png"
+    assert captures[1]["screenshot"] == "frames/0001.png"
+    assert captures[1]["frame_id"] == "0001"
+    assert captures[1]["deduped_from_frame_id"] == "0001"
 
 
 def test_pause_recording_closes_active_session_before_pause_gap(tmp_path, monkeypatch):
@@ -504,7 +701,7 @@ def test_recorder_controller_rate_limits_in_app_capture(tmp_path, monkeypatch):
     clicks = [event for event in events if event["type"] == "click"]
     assert len(clicks) == 2
     assert clicks[0]["screenshot_frame_id"] == "0002"
-    assert clicks[1]["screenshot_frame_id"] == "0003"
+    assert clicks[1]["screenshot_frame_id"] == "0002"
 
 
 def test_click_after_unpolled_window_switch_records_window_switch_not_in_app_capture(
