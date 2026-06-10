@@ -73,7 +73,7 @@ if errorlevel 1 (
 
 echo.
 echo [4/5] Creating default config...
-".venv\Scripts\python.exe" -c "from pathlib import Path; import json; root=Path.home()/'.teach-skill'; rec=root/'recordings'; root.mkdir(parents=True, exist_ok=True); rec.mkdir(parents=True, exist_ok=True); cfg=root/'config.json'; data={'hotkey_toggle':'ctrl+shift+t','hotkey_pause':'ctrl+shift+p','storage_path':str(rec),'screenshot_resolution':'native','privacy_filter':True,'capture_raw_keystrokes':False,'capture_ui_context':True}; cfg.exists() or cfg.write_text(json.dumps(data, indent=2), encoding='utf-8')"
+".venv\Scripts\python.exe" -c "from pathlib import Path; import json; root=Path.home()/'.teach-skill'; rec=root/'recordings'; root.mkdir(parents=True, exist_ok=True); rec.mkdir(parents=True, exist_ok=True); cfg=root/'config.json'; data={'hotkey_toggle':'ctrl+shift+t','hotkey_pause':'ctrl+shift+p','storage_path':str(rec),'screenshot_resolution':'native','screenshot_capture_mode':'adaptive','compile_max_image_edge':1568,'privacy_filter':True,'capture_raw_keystrokes':False,'capture_ui_context':True}; cfg.exists() or cfg.write_text(json.dumps(data, indent=2), encoding='utf-8')"
 if errorlevel 1 (
     echo   Error: Failed to create default config.
     pause

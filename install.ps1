@@ -109,6 +109,8 @@ if (Test-Path $configFile) {
         "hotkey_pause" = "ctrl+shift+p"
         "storage_path" = $defaultRecordingsDir.Replace("\", "\\")
         "screenshot_resolution" = "native"
+        "screenshot_capture_mode" = "adaptive"
+        "compile_max_image_edge" = 1568
         "privacy_filter" = $true
         "capture_raw_keystrokes" = $false
         "capture_ui_context" = $true

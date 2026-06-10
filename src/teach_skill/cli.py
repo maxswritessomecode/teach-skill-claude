@@ -51,7 +51,10 @@ def compile(jsonl_path: Path, yes: bool, name: str, save_global: bool):
     except ValueError:
         pass
 
-    compiler = SkillCompiler(jsonl_path)
+    compiler = SkillCompiler(
+        jsonl_path,
+        compile_max_image_edge=config.get("compile_max_image_edge", 1568),
+    )
 
     click.echo(f"Loading recording: {jsonl_path}")
     compiler.load()
@@ -219,7 +222,10 @@ def record(test_mode: bool, auto_compile: bool):
                     click.echo("Please install it to use --auto-compile: pip install claude-agent-sdk", err=True)
                     sys.exit(1)
 
-                compiler = SkillCompiler(jsonl_path)
+                compiler = SkillCompiler(
+                    jsonl_path,
+                    compile_max_image_edge=config.get("compile_max_image_edge", 1568),
+                )
 
                 click.echo("Compiling skill via Agent SDK...")
                 try:

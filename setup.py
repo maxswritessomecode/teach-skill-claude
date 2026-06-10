@@ -9,12 +9,12 @@ setup(
     install_requires=[
         "click",
         "claude-agent-sdk",
+        "Pillow",
     ],
     extras_require={
         "recorder": [
             "pywin32",
             "pynput",
-            "Pillow",
             "pystray",
             "psutil",
             "uiautomation",

@@ -29,6 +29,10 @@ def test_load_config_fills_missing_keys(tmp_path, monkeypatch):
 
 def test_default_config_has_required_keys():
     required = ["hotkey_toggle", "hotkey_pause", "storage_path",
-                 "screenshot_resolution", "privacy_filter"]
+                 "screenshot_resolution", "screenshot_capture_mode",
+                 "compile_max_image_edge", "privacy_filter"]
     for key in required:
         assert key in DEFAULT_CONFIG
+
+    assert DEFAULT_CONFIG["screenshot_capture_mode"] == "adaptive"
+    assert DEFAULT_CONFIG["compile_max_image_edge"] == 1568

@@ -49,13 +49,16 @@ def get_active_window_info() -> dict:
     return {"process": "mock_process.exe", "title": "Mock Title - Chrome"}
 
 
-def capture_screenshot_stub() -> Image.Image:
+def capture_screenshot() -> Image.Image:
     # Test fallback capture used when native screen capture is unavailable.
     if sys.platform == "win32":
         from PIL import ImageGrab
         return ImageGrab.grab()
     
     return Image.new("RGB", (800, 600), color="blue")
+
+
+capture_screenshot_stub = capture_screenshot
 
 
 def get_clipboard_text() -> str:

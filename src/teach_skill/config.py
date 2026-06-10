@@ -6,6 +6,8 @@ DEFAULT_CONFIG = {
     "hotkey_pause": "ctrl+shift+p",
     "storage_path": str(Path.home() / ".teach-skill" / "recordings"),
     "screenshot_resolution": "native",
+    "screenshot_capture_mode": "adaptive",
+    "compile_max_image_edge": 1568,
     "privacy_filter": True,
     "capture_ui_context": True,
 }
