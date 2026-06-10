@@ -62,7 +62,7 @@ def test_compiler_prompt_stream_attaches_screenshot_image_blocks():
     assert content[0]["type"] == "text"
 
     image_blocks = [block for block in content if block["type"] == "image"]
-    assert len(image_blocks) == 4
+    assert len(image_blocks) == 5
     assert image_blocks[0]["source"]["type"] == "base64"
     assert image_blocks[0]["source"]["media_type"] == "image/png"
     assert image_blocks[0]["source"]["data"]
@@ -85,6 +85,200 @@ def test_compiler_prompt_stream_labels_screenshot_image_blocks():
         "Screen 0002: frames/0002.png",
         "Screen 0003: frames/0003.png",
         "Screen 0004: frames/0004.png",
+    ]
+
+
+def test_compiler_prompt_stream_includes_labeled_contact_sheet():
+    compiler = SkillCompiler(FIXTURE)
+    compiler.load()
+
+    messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+    content = messages[0]["message"]["content"]
+
+    contact_sheet_labels = [
+        block["text"]
+        for block in content
+        if block["type"] == "text" and block["text"].startswith("Screenshot contact sheet")
+    ]
+    contact_sheet_index = content.index({"type": "text", "text": contact_sheet_labels[0]})
+    contact_sheet = content[contact_sheet_index + 1]
+    decoded = base64.b64decode(contact_sheet["source"]["data"])
+    image = Image.open(BytesIO(decoded))
+
+    assert contact_sheet_labels == [
+        "Screenshot contact sheet: 4 screenshots are shown as labeled thumbnails."
+    ]
+    assert contact_sheet["type"] == "image"
+    assert contact_sheet["source"]["media_type"] == "image/png"
+    assert image.width > image.height
+
+
+def test_compiler_prompt_stream_omits_low_value_full_frames_but_keeps_contact_sheet(
+    tmp_path,
+):
+    recording_dir = tmp_path / "recording_20260610_100000"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    for frame_name, color in [
+        ("0001.png", "red"),
+        ("0002.png", "green"),
+        ("0003.png", "blue"),
+    ]:
+        Image.new("RGB", (20, 20), color).save(frames_dir / frame_name)
+
+    events = [
+        {"type": "recording_meta", "machine": "X"},
+        {
+            "type": "window_switch",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0001.png",
+            "frame_id": "0001",
+        },
+        {
+            "type": "post_action_capture",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0002.png",
+            "frame_id": "0002",
+            "ui_context": {"name": "Bold", "control_type": "Button"},
+        },
+        {
+            "type": "click",
+            "process": "EXCEL.EXE",
+            "title": "Workbook.xlsx - Excel",
+            "screenshot": "frames/0003.png",
+            "frame_id": "0003",
+        },
+    ]
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+    messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+    content = messages[0]["message"]["content"]
+
+    labels = [
+        block["text"]
+        for block in content
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+    contact_sheet_labels = [
+        block["text"]
+        for block in content
+        if block["type"] == "text" and block["text"].startswith("Screenshot contact sheet")
+    ]
+
+    assert contact_sheet_labels == [
+        "Screenshot contact sheet: 3 screenshots are shown as labeled thumbnails."
+    ]
+    assert labels == [
+        "Screen 0001: frames/0001.png",
+        "Screen 0003: frames/0003.png",
+    ]
+    assert any(
+        block["type"] == "text" and "Full-size screenshots omitted: 1" in block["text"]
+        for block in content
+    )
+
+
+def test_contact_sheet_is_omitted_if_it_changes_selected_full_frames(tmp_path):
+    recording_dir = tmp_path / "recording_20260610_110000"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    Image.new("RGB", (2, 2), "red").save(frames_dir / "0001.png")
+    Image.new("RGB", (2, 2), "green").save(frames_dir / "0002.png")
+    rng = random.Random(2)
+    pixels = bytes(rng.randrange(256) for _ in range(200 * 200 * 3))
+    Image.frombytes("RGB", (200, 200), pixels).save(frames_dir / "0003.png")
+
+    events = [{"type": "recording_meta", "machine": "X"}]
+    for frame_id in ("0001", "0002", "0003"):
+        events.append(
+            {
+                "type": "window_switch",
+                "process": "EXCEL.EXE",
+                "title": "Workbook.xlsx - Excel",
+                "screenshot": f"frames/{frame_id}.png",
+                "frame_id": frame_id,
+            }
+        )
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    budget = sum(
+        ((frames_dir / frame_name).stat().st_size + 2) // 3 * 4
+        for frame_name in ("0001.png", "0003.png")
+    )
+
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+
+    with patch("teach_skill.compiler.agent.MAX_SCREENSHOT_PAYLOAD_BYTES", budget):
+        messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+
+    content = messages[0]["message"]["content"]
+    labels = [
+        block["text"]
+        for block in content
+        if block["type"] == "text" and block["text"].startswith("Screen ")
+    ]
+
+    assert not any(
+        block["type"] == "text" and block["text"].startswith("Screenshot contact sheet")
+        for block in content
+    )
+    assert labels == [
+        "Screen 0001: frames/0001.png",
+        "Screen 0003: frames/0003.png",
+    ]
+
+
+def test_contact_sheet_caps_thumbnail_count_before_rendering(tmp_path):
+    recording_dir = tmp_path / "recording_20260610_120000"
+    frames_dir = recording_dir / "frames"
+    frames_dir.mkdir(parents=True)
+    events = [{"type": "recording_meta", "machine": "X"}]
+    for index in range(1, 7):
+        frame_name = f"{index:04d}.png"
+        Image.new("RGB", (20, 20), (index * 20, index * 20, index * 20)).save(
+            frames_dir / frame_name
+        )
+        events.append(
+            {
+                "type": "window_switch",
+                "process": "EXCEL.EXE",
+                "title": "Workbook.xlsx - Excel",
+                "screenshot": f"frames/{frame_name}",
+                "frame_id": f"{index:04d}",
+            }
+        )
+    recording_path = recording_dir / "recording.jsonl"
+    recording_path.write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+
+    compiler = SkillCompiler(recording_path)
+    compiler.load()
+
+    with patch("teach_skill.compiler.agent.CONTACT_SHEET_MAX_THUMBNAILS", 3):
+        messages = asyncio.run(collect_async(compiler.iter_prompt_messages()))
+
+    contact_sheet_labels = [
+        block["text"]
+        for block in messages[0]["message"]["content"]
+        if block["type"] == "text" and block["text"].startswith("Screenshot contact sheet")
+    ]
+
+    assert contact_sheet_labels == [
+        "Screenshot contact sheet: 3 screenshots are shown as labeled thumbnails."
     ]
 
 
@@ -417,7 +611,7 @@ def test_prompt_stream_limits_attached_screenshot_payload(tmp_path):
     ]
 
     assert len(image_blocks) < 6
-    assert any("Screenshots omitted" in text for text in text_blocks)
+    assert any("Full-size screenshots omitted" in text for text in text_blocks)
 
 
 def test_prompt_stream_trims_by_frame_value_and_preserves_chronological_order(tmp_path):
@@ -481,7 +675,7 @@ def test_prompt_stream_trims_by_frame_value_and_preserves_chronological_order(tm
         "Screen 0003: frames/0003.png",
     ]
     assert any(
-        block["type"] == "text" and "Screenshots omitted: 1" in block["text"]
+        block["type"] == "text" and "Full-size screenshots omitted: 1" in block["text"]
         for block in messages[0]["message"]["content"]
     )
 
